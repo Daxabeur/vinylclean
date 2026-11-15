@@ -74,6 +74,7 @@ struct Shared {
     std::atomic<float> load{0.f}, loadMax{0.f};
     std::atomic<float> peakIn[2], peakOut[2];
     std::atomic<unsigned> satCount{0};
+    std::atomic<float> recPeak{0.f};      // peak of the recorded signal (silence auto-stop)
     LoudRing loud;
     vcd::Recorder* rec = nullptr;
     Shared() { for (int c = 0; c < 2; ++c) { peakIn[c] = 0.f; peakOut[c] = 0.f; } }
@@ -428,6 +429,11 @@ struct Engine {
             if (over) s->satPhono.fetch_add(1, std::memory_order_relaxed);
         }
         if (s->rec) s->rec->push(ip.data(), 2, size_t(P));   // lock-free copy (after the RIAA)
+        {
+            float pk = 0.f;
+            for (int c = 0; c < 2; ++c) for (int i = 0; i < P; ++i) pk = std::fmax(pk, std::fabs(pin[size_t(c) * kMax + i]));
+            if (pk > s->recPeak.load(std::memory_order_relaxed)) s->recPeak.store(pk, std::memory_order_relaxed);
+        }
 
         ChainParams prm;
         const auto r = std::memory_order_relaxed;
@@ -793,7 +799,7 @@ int main(int argc, char** argv) {
     meter.reset(st.rate);
     double lST = -120, lInt = -120, lLRA = 0, lPLR = 0, lSec = 0;
     auto lastLoud = std::chrono::steady_clock::now(), lastBcast = lastLoud, lastSave = lastLoud, lastRecs = lastLoud;
-    auto lastClient = lastLoud;
+    auto lastClient = lastLoud, lastSound = lastLoud;
     bool everConnected = false;
     unsigned lastSat = 0, lastSatP = 0;
     auto lastSatTime = lastLoud - std::chrono::seconds(10), lastSatPTime = lastSatTime;
@@ -816,7 +822,7 @@ int main(int argc, char** argv) {
 
         // The window was closed: quit (a reload reconnects within 2 s).
         if (web.clients() > 0) { everConnected = true; lastClient = now; }
-        else if (windowOpened && everConnected && now - lastClient > std::chrono::seconds(8) && !rec.recording()) break;
+        else if (windowOpened && everConnected && now - lastClient > std::chrono::seconds(8)) break;   // a recording is stopped and saved below
 
         // ---- Recording commands ----
         {
@@ -852,6 +858,12 @@ int main(int argc, char** argv) {
             if (rec.failed()) recStop("stop_error");
             if (rec.recording() && now - lastRecs > std::chrono::seconds(2) && vcd::freeBytes(recDir) < (uint64_t(200) << 20)) recStop("stop_disk");
             if (rec.recording() && !engineOpen) recStop("stop_card");
+            // No sound for 2 minutes (arm raised, side finished): stop and save.
+            {
+                const float pk = sh.recPeak.exchange(0.f);
+                if (!rec.recording() || pk >= 3.2e-3f) lastSound = now;   // −50 dBFS
+                else if (now - lastSound > std::chrono::seconds(120)) recStop("stop_silence");
+            }
         }
 
         // ---- Audio reconfiguration (card, rate) ----
@@ -959,7 +971,7 @@ int main(int argc, char** argv) {
         }
     }
 
-    // ---- Quit ----
+    // ---- Quit: a recording in progress is stopped and saved (FLAC finalized) ----
     if (rec.recording()) rec.stop();
     job.cancel = true;
     if (job.th.joinable()) job.th.join();

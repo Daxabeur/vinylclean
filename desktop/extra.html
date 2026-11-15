@@ -55,6 +55,7 @@
     "file.e.busy": "a file is already being cleaned",
     "card.heavy": "  ⚠ too heavy for this computer (≈ {0} %)", "card.default": "System default",
     "recs.folder": "Folder: {0}",
+    "rec.m.stop_silence": "No sound for 2 minutes (arm raised?): recording stopped and saved ({1})",
     "d.open": "cannot open the sound card at {0} Hz", "d.start": "the sound card does not start", "d.noaudio": "no audio system found",
     "d.in": "input not found: {0}", "d.out": "output not found: {0}", "d.rate": "invalid sample rate"
   });
@@ -69,14 +70,14 @@
     "file.e.busy": "un fichier est déjà en cours de nettoyage",
     "card.heavy": "  ⚠ trop lourd pour cet ordinateur (≈ {0} %)", "card.default": "Périphérique par défaut",
     "recs.folder": "Dossier : {0}",
+    "rec.m.stop_silence": "Plus de son depuis 2 minutes (bras levé ?) : enregistrement arrêté et sauvegardé ({1})",
     "d.open": "impossible d'ouvrir la carte son à {0} Hz", "d.start": "la carte son ne démarre pas", "d.noaudio": "aucun système audio trouvé",
     "d.in": "entrée introuvable : {0}", "d.out": "sortie introuvable : {0}", "d.rate": "fréquence d'échantillonnage invalide"
   });
 
   // ---- Card placed at the top of the second column ----
   const card = document.getElementById("fileTpl").content.firstElementChild.cloneNode(true);
-  const cols = document.querySelectorAll(".col");
-  (cols[1] || cols[0]).prepend(card);
+  document.getElementById("recCard").after(card);   // right after "Recording"
 
   let F = {state: 0}, sending = -1, side = "c";
   let fmt = "wav";
@@ -184,6 +185,11 @@
          .replace("invalid sample rate", t("d.rate"));
     return baseErr(e);
   };
+  // Closing the window during a recording: the browser asks for confirmation.
+  // If it is closed anyway, vinylclean stops and saves the recording, then quits.
+  window.addEventListener("beforeunload", e => {
+    if (St.recOn) { e.preventDefault(); e.returnValue = ""; return ""; }
+  });
   const baseApply = applyLang;
   applyLang = function () { baseApply(); fileRender(); showFolder(); };
   applyLang();

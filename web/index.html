@@ -83,6 +83,9 @@
   }
   body.kiosk { --fs: 17px; }
   [hidden] { display: none !important; }
+  .sub { font-size: 13px; text-transform: uppercase; letter-spacing: .8px; color: var(--dim); font-weight: 600;
+    margin: 18px 0 6px; padding-top: 12px; border-top: 1px solid var(--line); }
+  .hint { margin: 6px 0 0; font-size: 13px; color: var(--ok); }
   /* Recording */
   .recrow { display: flex; gap: 8px; align-items: center; }
   input[type=text] { width: 100%; min-height: 46px; border-radius: 10px; border: 1px solid var(--line); background: #252931;
@@ -150,27 +153,6 @@
   </section>
 
   <section class="card">
-    <h2 data-i18n="phono.title"></h2>
-    <div class="seg" id="riaa">
-      <button data-v="0"><span data-i18n="phono.ext"></span><small data-i18n="phono.ext.s"></small></button>
-      <button data-v="1"><span data-i18n="phono.int"></span><small data-i18n="phono.int.s"></small></button>
-    </div>
-    <div id="phonoBox">
-      <div class="row">
-        <label><span class="lbl" data-i18n="phono.gain"></span> <span id="vPhonoGain">–</span></label>
-        <input type="range" id="phonoGain" min="0" max="40" step="1">
-      </div>
-      <div class="row">
-        <label data-i18n="phono.rumble"></label>
-        <div class="seg" id="rumble" style="margin-top:6px">
-          <button data-v="0" data-i18n="no"></button><button data-v="1" data-i18n="yes"></button>
-        </div>
-      </div>
-    </div>
-    <p class="note" id="riaaNote"></p>
-  </section>
-
-  <section class="card">
     <h2 data-i18n="sens.title"></h2>
     <div class="row" style="margin-top:0">
       <label><span class="lbl" data-i18n="sens.both"></span> <span id="tSens"></span></label>
@@ -196,29 +178,22 @@
       <span data-i18n="levels.outL"></span><div class="bar"><i id="mOutL"></i></div><span class="db" id="dOutL">–</span>
       <span data-i18n="levels.outR"></span><div class="bar"><i id="mOutR"></i></div><span class="db" id="dOutR">–</span>
     </div>
-    <div class="stats" style="margin-top:12px;grid-template-columns:repeat(3,1fr)">
+    <div class="stats" style="margin-top:12px;grid-template-columns:repeat(2,1fr)">
       <div><b id="sLufs">–</b><span data-i18n="levels.lufs"></span></div>
-      <div><b id="sLra">–</b><span data-i18n="levels.lra"></span></div>
       <div><b id="sPlr">–</b><span data-i18n="levels.plr"></span></div>
     </div>
     <p class="note" id="loudNote"></p>
   </section>
 
-  <section class="card" id="recCard">
-    <h2 data-i18n="rec.title"></h2>
-    <label for="recName" data-i18n="rec.name"></label>
-    <input type="text" id="recName" maxlength="150" autocomplete="off">
-    <div class="recrow" style="margin-top:10px">
-      <button class="btn rec" id="recStart"><span class="rd"></span><span data-i18n="rec.start"></span></button>
-      <button class="btn stop" id="recStop" disabled><span class="sq"></span><span data-i18n="rec.stop"></span></button>
+  <section class="card">
+    <div class="stats">
+      <div><b id="sClicks">0</b><span data-i18n="st.clicks"></span></div>
+      <div><b id="sCrackles">0</b><span data-i18n="st.crackles"></span></div>
+      <div><b id="sLoad">–</b><span data-i18n="st.load"></span></div>
+      <div><b id="sXruns">0</b><span data-i18n="st.xruns"></span></div>
     </div>
-    <div class="recstate" id="recState" hidden><span class="live"></span><b id="recTime">0:00</b><span id="recFile" class="note" style="margin:0"></span></div>
-    <p class="note" id="recNote"></p>
-    <p class="note" id="recFree"></p>
   </section>
-</div>
 
-<div class="col">
   <section class="card" id="adCard">
     <h2 data-i18n="ad.title"></h2>
     <div class="seg" id="ad">
@@ -298,7 +273,9 @@
       <p class="note" data-i18n="ad.note"></p>
     </div>
   </section>
+</div>
 
+<div class="col">
   <section class="card">
     <details id="advBox">
       <summary data-i18n="adv.title"></summary>
@@ -333,24 +310,48 @@
         <div class="seg" id="multiband" style="margin-top:6px">
           <button data-v="0" data-i18n="adv.fullband"></button><button data-v="1" data-i18n="adv.multiband"></button>
         </div>
+        <p class="hint" data-i18n="adv.repair.h"></p>
       </div>
       <div class="row">
         <label data-i18n="adv.stereo"></label>
         <div class="seg" id="stereo" style="margin-top:6px">
           <button data-v="0" data-i18n="adv.separate"></button><button data-v="1" data-i18n="adv.linked"></button>
         </div>
+        <p class="hint" data-i18n="adv.stereo.h"></p>
       </div>
       <p class="note" data-i18n="adv.note"></p>
+      <h3 class="sub" data-i18n="phono.title"></h3>
+      <div class="seg" id="riaa">
+        <button data-v="0"><span data-i18n="phono.ext"></span><small data-i18n="phono.ext.s"></small></button>
+        <button data-v="1"><span data-i18n="phono.int"></span><small data-i18n="phono.int.s"></small></button>
+      </div>
+      <div id="phonoBox">
+        <div class="row">
+          <label><span class="lbl" data-i18n="phono.gain"></span> <span id="vPhonoGain">–</span></label>
+          <input type="range" id="phonoGain" min="0" max="40" step="1">
+        </div>
+        <div class="row">
+          <label data-i18n="phono.rumble"></label>
+          <div class="seg" id="rumble" style="margin-top:6px">
+            <button data-v="0" data-i18n="no"></button><button data-v="1" data-i18n="yes"></button>
+          </div>
+        </div>
+      </div>
+      <p class="note" id="riaaNote"></p>
     </details>
   </section>
 
-  <section class="card">
-    <div class="stats">
-      <div><b id="sClicks">0</b><span data-i18n="st.clicks"></span></div>
-      <div><b id="sCrackles">0</b><span data-i18n="st.crackles"></span></div>
-      <div><b id="sLoad">–</b><span data-i18n="st.load"></span></div>
-      <div><b id="sXruns">0</b><span data-i18n="st.xruns"></span></div>
+  <section class="card" id="recCard">
+    <h2 data-i18n="rec.title"></h2>
+    <label for="recName" data-i18n="rec.name"></label>
+    <input type="text" id="recName" maxlength="150" autocomplete="off">
+    <div class="recrow" style="margin-top:10px">
+      <button class="btn rec" id="recStart"><span class="rd"></span><span data-i18n="rec.start"></span></button>
+      <button class="btn stop" id="recStop" disabled><span class="sq"></span><span data-i18n="rec.stop"></span></button>
     </div>
+    <div class="recstate" id="recState" hidden><span class="live"></span><b id="recTime">0:00</b><span id="recFile" class="note" style="margin:0"></span></div>
+    <p class="note" id="recNote"></p>
+    <p class="note" id="recFree"></p>
   </section>
 
   <section class="card" id="recsCard">
@@ -395,8 +396,8 @@ const I18N = {
     "prot.none": "None", "prot.normal": "Normal", "prot.max": "Maximum",
     "sens.note": "0 = off. 1 to 5: more and more sensitive. Separate declick and decrackle settings: “Advanced settings”. To remove more large clicks: protection “None”.",
     "levels.title": "Levels", "levels.inL": "Input L", "levels.inR": "Input R", "levels.outL": "Output L", "levels.outR": "Output R",
-    "levels.lufs": "loudness (3 s)", "levels.lra": "dynamic range", "levels.plr": "peak / average",
-    "levels.note": "Dynamic range (LRA, EBU R128) and peak-to-loudness ratio, over the last minute.",
+    "levels.lufs": "loudness (3 s)", "levels.plr": "peak / average",
+    "levels.note": "Loudness (EBU R128) and peak-to-loudness ratio, over the last minute.",
     "levels.partial": "Measured over {0} s (one minute for the full value).",
     "rec.title": "Recording", "rec.name": "File name", "rec.placeholder": "e.g. Artist - Album - Side A",
     "rec.start": "Record", "rec.stop": "Stop",
@@ -433,7 +434,9 @@ const I18N = {
     "adv.declickInt": "Declick intensity", "adv.decrackleInt": "Decrackle intensity", "adv.maxclick": "Maximum click length",
     "adv.repair": "Repair", "adv.fullband": "Full band", "adv.multiband": "Multiband",
     "adv.stereo": "Stereo", "adv.separate": "Separate channels", "adv.linked": "Linked channels",
-    "adv.note": "Sensitivities 0 to 5 choose these intensities; a value between two steps shows as “custom”. Multiband: only the frequency bands where the click dominates are repaired, so the music is touched less, especially with protection “None”. Full band: removes a little more of each click. Linked channels: a click present on one side only is easier to recognize, and long clicks are rebuilt with help from the other channel (turns itself off on a mono record).",
+    "adv.note": "Sensitivities 0 to 5 choose these intensities; a value between two steps shows as “custom”.",
+    "adv.repair.h": "Best: Multiband — only the frequencies where the click is are repaired, the music stays more natural. Full band removes a little more of each click but touches the music more.",
+    "adv.stereo.h": "Best: Linked — finds more clicks (most are on one side only) and rebuilds long clicks with the other channel. Separate: only to compare.",
     "st.clicks": "clicks", "st.crackles": "crackles", "st.load": "load", "st.xruns": "dropouts",
     "card.title": "Sound card and quality", "card.in": "Input", "card.out": "Output", "card.rate": "Sample rate",
     "card.apply": "Apply (≈ 1 s of silence)", "card.current": "{0} (current)",
@@ -458,8 +461,8 @@ const I18N = {
     "prot.none": "Aucune", "prot.normal": "Normale", "prot.max": "Maximale",
     "sens.note": "0 = désactivé. 1 à 5 : de plus en plus sensible. Réglage séparé du déclick et du dé-crackle : « Paramètres avancés ». Pour enlever plus de gros clics : protection « Aucune ».",
     "levels.title": "Niveaux", "levels.inL": "Entrée G", "levels.inR": "Entrée D", "levels.outL": "Sortie G", "levels.outR": "Sortie D",
-    "levels.lufs": "sonie (3 s)", "levels.lra": "plage dynamique", "levels.plr": "crête / moyenne",
-    "levels.note": "Plage dynamique (LRA, norme EBU R128) et écart crête / sonie moyenne, sur la dernière minute.",
+    "levels.lufs": "sonie (3 s)", "levels.plr": "crête / moyenne",
+    "levels.note": "Sonie (norme EBU R128) et écart crête / sonie moyenne, sur la dernière minute.",
     "levels.partial": "Mesure sur {0} s (une minute pour la valeur complète).",
     "rec.title": "Enregistrement", "rec.name": "Nom du fichier", "rec.placeholder": "ex. Artiste - Album - Face A",
     "rec.start": "Enregistrer", "rec.stop": "Arrêter",
@@ -496,7 +499,9 @@ const I18N = {
     "adv.declickInt": "Intensité du déclick", "adv.decrackleInt": "Intensité du dé-crackle", "adv.maxclick": "Longueur max d'un clic",
     "adv.repair": "Réparation", "adv.fullband": "Pleine bande", "adv.multiband": "Multibande",
     "adv.stereo": "Stéréo", "adv.separate": "Canaux séparés", "adv.linked": "Canaux liés",
-    "adv.note": "Les sensibilités 0 à 5 choisissent ces intensités ; une valeur entre deux crans s'affiche « perso ». Multibande : on ne répare que les bandes de fréquences où le clic domine, la musique est moins touchée, surtout en protection « Aucune ». Pleine bande : enlève un peu plus de chaque clic. Canaux liés : un clic présent d'un seul côté est plus facile à reconnaître, et les longs clics sont reconstruits avec l'aide de l'autre canal (coupé tout seul sur un disque mono).",
+    "adv.note": "Les sensibilités 0 à 5 choisissent ces intensités ; une valeur entre deux crans s'affiche « perso ».",
+    "adv.repair.h": "Le mieux : Multibande — seules les fréquences où se trouve le clic sont réparées, la musique reste plus naturelle. Pleine bande enlève un peu plus de chaque clic mais touche davantage la musique.",
+    "adv.stereo.h": "Le mieux : Canaux liés — trouve plus de clics (la plupart ne sont que d'un côté) et reconstruit les longs clics avec l'autre canal. Séparés : seulement pour comparer.",
     "st.clicks": "clics", "st.crackles": "craquements", "st.load": "charge", "st.xruns": "coupures",
     "card.title": "Carte son et qualité", "card.in": "Entrée", "card.out": "Sortie", "card.rate": "Fréquence d'échantillonnage",
     "card.apply": "Appliquer (≈ 1 s de silence)", "card.current": "{0} (actuelle)",
@@ -712,7 +717,6 @@ function status() {
   $("sXruns").textContent = St.xruns;
   const ok = St.running && St.loudSec >= 3 && St.lufsS > -70;
   $("sLufs").textContent = ok ? Math.round(St.lufsS) + " LUFS" : "–";
-  $("sLra").textContent = ok && St.loudSec >= 10 ? fr(St.lra, 1) + " dB" : "–";
   $("sPlr").textContent = ok && St.loudSec >= 10 ? fr(St.plr, 1) + " dB" : "–";
   $("loudNote").textContent = St.loudSec < 60 ? t("levels.partial", Math.round(St.loudSec || 0)) : t("levels.note");
   $("info").textContent = St.running ? fr(St.rate / 1000, St.rate % 1000 ? 1 : 0) + " kHz · " + St.format + " · " + St.latency + " ms"
