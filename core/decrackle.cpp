@@ -63,7 +63,7 @@ void Chain::setParams(const ChainParams& p) {
     ad_.setParams(p.dist);
 }
 
-void Chain::process(const float* const* in, float* const* out, int n) {
+void Chain::process(const float* const* in, float* const* out, int n, float* const* repaired) {
     DenormalGuard dg;
     if (prm_.mode != cur_) { prev_ = cur_; cur_ = prm_.mode; fadePos_ = fadeLen_; }
     const float* ain[kMaxChannels];
@@ -105,6 +105,7 @@ void Chain::process(const float* const* in, float* const* out, int n) {
             const float* rw = &raw_[c * kChunk];
             const float* rs = bout[c];
             float* o = out[c] + off;
+            if (repaired) std::copy(rs, rs + m, repaired[c] + off);   // cleaned signal, whatever the listening mode
             for (int i = 0; i < m; ++i) {
                 const float vNew = pick(cur_, rw[i], rs[i]);
                 const int fp = fadePos_ - i;

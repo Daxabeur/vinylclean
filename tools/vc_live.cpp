@@ -48,6 +48,7 @@ static void onSignal(int) { gRun = false; }
 static const unsigned kRates[] = {44100, 48000, 88200, 96000, 176400, 192000};
 
 #include "loudness.h"
+#include "levels.h"
 #include "riaa.h"
 #ifdef VC_RECORD
 #include "recorder.h"
@@ -83,6 +84,8 @@ struct Shared {
     std::atomic<bool> rtOk{false};
     std::atomic<bool> failed{false};
     LoudRing loud;
+    LevelRing lv;                  // balance / stereo / noise sums (after the phono preamp)
+    std::atomic<bool> recClean{false};   // the recording in progress takes the cleaned sound
 #ifdef VC_RECORD
     Recorder* rec = nullptr;      // RAW turntable sound → file (before any processing)
 #endif
@@ -100,6 +103,7 @@ struct Settings {
     bool riaa = false;
     float phonoGainDb = 12.f;
     bool rumble = true;
+    bool recClean = false;         // recording: false = raw turntable sound, true = cleaned sound
     // Anti-distortion
     bool adOn = false, adAutoPos = true;
     float armLen = 222.f, null1 = 60.325f, null2 = 117.42f, stylusUm = 7.6f;
@@ -119,10 +123,10 @@ static std::string settingsToJson(const Settings& s) {
     char b[2048];
     std::snprintf(b, sizeof b,
                   "{\"scale\":3,\"ad\":%d,\"armLen\":%g,\"align\":%d,\"null1\":%g,\"null2\":%g,\"stylus\":%d,\"stylusUm\":%g,\"disc\":%d,\"autoPos\":%d,\"posMm\":%g,\"sideMin\":%g,\"adInt\":%g,"
-                  "\"sens\":%d,\"sensDeclick\":%d,\"sensDecrackle\":%d,\"declick\":%g,\"decrackle\":%g,\"protect\":%d,\"maxclick\":%g,\"multiband\":%d,\"stereo\":%d,\"riaa\":%d,\"phonoGain\":%g,\"rumble\":%d,\"mode\":%d,"
+                  "\"sens\":%d,\"sensDeclick\":%d,\"sensDecrackle\":%d,\"declick\":%g,\"decrackle\":%g,\"protect\":%d,\"maxclick\":%g,\"multiband\":%d,\"stereo\":%d,\"riaa\":%d,\"phonoGain\":%g,\"rumble\":%d,\"recClean\":%d,\"mode\":%d,"
                   "\"in\":\"%s\",\"out\":\"%s\",\"rate\":%u,\"periods\":%d}",
                   s.adOn ? 1 : 0, s.armLen, s.align, s.null1, s.null2, s.stylus, s.stylusUm, s.disc, s.adAutoPos ? 1 : 0, s.posMm, s.sideMin, s.adInt,
-                  commonSens(s), declickSensForIntensity(s.declick), decrackleSensForIntensity(s.decrackle), s.declick, s.decrackle, s.protect, s.maxClick, s.multiband ? 1 : 0, s.stereo ? 1 : 0, s.riaa ? 1 : 0, s.phonoGainDb, s.rumble ? 1 : 0, s.mode,
+                  commonSens(s), declickSensForIntensity(s.declick), decrackleSensForIntensity(s.decrackle), s.declick, s.decrackle, s.protect, s.maxClick, s.multiband ? 1 : 0, s.stereo ? 1 : 0, s.riaa ? 1 : 0, s.phonoGainDb, s.rumble ? 1 : 0, s.recClean ? 1 : 0, s.mode,
                   jsonEscape(s.inDev).c_str(), jsonEscape(s.outDev).c_str(), s.rate, s.periods);
     return b;
 }
@@ -139,6 +143,7 @@ static void settingsFromJson(const JsonFlat& j, Settings& s) {
     if (j.has("riaa")) s.riaa = j.num("riaa") != 0;
     if (j.has("phonoGain")) s.phonoGainDb = float(std::fmin(40, std::fmax(0, j.num("phonoGain"))));
     if (j.has("rumble")) s.rumble = j.num("rumble") != 0;
+    if (j.has("recClean")) s.recClean = j.num("recClean") != 0;
     auto clampf = [](double v, double lo, double hi) { return float(std::fmin(hi, std::fmax(lo, v))); };
     if (j.has("ad")) s.adOn = j.num("ad") != 0;
     if (j.has("armLen")) s.armLen = clampf(j.num("armLen"), 150, 400);
@@ -335,10 +340,11 @@ struct Engine {
         const size_t P = period;
         // Buffers allocated BEFORE the audio loop.
         std::vector<uint8_t> inRaw(P * nch * fmt.bytes), outRaw(P * nch * fmt.bytes);
-        std::vector<float> planIn(P * nch), planOut(P * nch);
+        std::vector<float> planIn(P * nch), planOut(P * nch), planRest(P * nch);
         std::vector<const float*> ip(nch);
         std::vector<float*> op(nch);
-        for (int c = 0; c < nch; ++c) { ip[c] = &planIn[c * P]; op[c] = &planOut[c * P]; }
+        std::vector<float*> rp(nch);
+        for (int c = 0; c < nch; ++c) { ip[c] = &planIn[c * P]; op[c] = &planOut[c * P]; rp[c] = &planRest[c * P]; }
         const double periodSec = double(P) / cfg.rate;
         float loadAvg = 0.f;
         int warm = 50;  // the first periods (start-up) do not count in the maximum
@@ -380,8 +386,11 @@ struct Engine {
                     for (int c = 0; c < nch && c < 2; ++c) { float* x = &planIn[c * P]; for (size_t i = 0; i < P; ++i) phono[c].tick(x[i], false, g, rb); }
                 }
             }
+            // Balance / stereo / noise of the turntable signal (after the phono preamp).
+            sh->lv.push(levelSums(ip[0], ip[nch >= 2 ? 1 : 0], P));
+            const bool recClean = sh->recClean.load(std::memory_order_relaxed);
 #ifdef VC_RECORD
-            if (sh->rec) sh->rec->push(ip.data(), nch, P);   // lock-free copy, never blocking (after the RIAA)
+            if (sh->rec && !recClean) sh->rec->push(ip.data(), nch, P);   // raw sound: lock-free copy, never blocking (after the RIAA)
 #endif
             ChainParams prm;
             prm.declick.intensity = sh->declick.load(std::memory_order_relaxed);
@@ -412,7 +421,10 @@ struct Engine {
             }
 
             const auto t0 = std::chrono::steady_clock::now();
-            dec.process(ip.data(), op.data(), int(P));
+            dec.process(ip.data(), op.data(), int(P), recClean ? rp.data() : nullptr);
+#ifdef VC_RECORD
+            if (sh->rec && recClean) sh->rec->push(rp.data(), nch, P);   // cleaned sound (whatever the listening mode)
+#endif
             const double dt = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
             {
                 const AntiDistState ds = dec.distState();
@@ -750,6 +762,8 @@ int main(int argc, char** argv) {
 
     LoudnessMeter meter;
     meter.reset(st.rate);
+    LevelStats levels;
+    levels.reset(st.rate);
     double lST = -120, lInt = -120, lLRA = 0, lPLR = 0, lSec = 0;
     auto lastLoud = std::chrono::steady_clock::now();
     Settings good = st;  // last audio configuration that worked
@@ -838,8 +852,11 @@ int main(int argc, char** argv) {
                     else {
                         const std::string base = safeRecName(c.arg);
                         const std::string path = uniqueRecPath(recDir, base);
-                        const int bits = eng.fmt.bytes == 2 ? 16 : 24;
-                        if (rec.start(path, eng.cfg.rate, std::min(eng.channels, 2), bits, base, err)) {
+                        bool clean; { std::lock_guard<std::mutex> lk(stMutex); clean = st.recClean; }
+                        const int bits = (eng.fmt.bytes == 2 && !clean) ? 16 : 24;
+                        sh.recClean = clean;   // before start(): the audio thread then pushes the right signal
+                        if (rec.start(path, eng.cfg.rate, std::min(eng.channels, 2), bits, base, err,
+                                      clean ? "Cleaned recording — vinylclean" : "Raw recording (no processing) — vinylclean")) {
                             recName = path.substr(recDir.size() + 1);
                             std::lock_guard<std::mutex> lk(stMutex); recMsg.clear();
                             if (!quiet) std::printf("\nRecording: %s (%u Hz, %d bits)\n", path.c_str(), eng.cfg.rate, bits);
@@ -876,6 +893,7 @@ int main(int argc, char** argv) {
             { std::lock_guard<std::mutex> lk(stMutex); want = pending; }
             if (engineOpen) { eng.stopThread(); eng.close(); engineOpen = false; }
             meter.reset(want.rate);
+            levels.reset(want.rate);
             if (openEngine(want)) {
                 good = want;
                 std::lock_guard<std::mutex> lk(stMutex);
@@ -899,7 +917,8 @@ int main(int argc, char** argv) {
         }
         // Loudness and dynamic range (computed once per second).
         { LoudItem it; while (sh.loud.pop(it)) meter.add(it); }
-        if (now - lastLoud >= std::chrono::seconds(1)) { lastLoud = now; meter.compute(lST, lInt, lLRA, lPLR, lSec); }
+        { LevelItem it; while (sh.lv.pop(it)) levels.add(it); }
+        if (now - lastLoud >= std::chrono::seconds(1)) { lastLoud = now; meter.compute(lST, lInt, lLRA, lPLR, lSec); levels.compute(); }
         if (changed.exchange(false) && httpPort > 0) web.broadcast(stateJson());
         if (wantCards.exchange(false) && httpPort > 0) web.broadcast(cardsJson(eng, engineOpen));
 #ifdef VC_RECORD
@@ -984,6 +1003,9 @@ int main(int argc, char** argv) {
                               (double)sh.adRadius.load(), (double)sh.adTrack.load(), (double)sh.adGroove.load(),
                               (double)sh.adSide.load(), sh.adReady.load() ? "true" : "false");
                 full.insert(full.size() - 1, ab);
+                auto num = [](double v, const char* f) { char t[32]; if (std::isfinite(v)) std::snprintf(t, sizeof t, f, v); else std::snprintf(t, sizeof t, "null"); return std::string(t); };
+                full.insert(full.size() - 1, ",\"bal\":" + num(levels.balanceDb, "%.1f") + ",\"corr\":" + num(levels.correlation, "%.2f") +
+                                             ",\"noise\":" + num(levels.noiseDb, "%.0f") + ",\"recClean\":" + (sh.recClean ? "true" : "false"));
             }
             web.broadcast(full);
         }

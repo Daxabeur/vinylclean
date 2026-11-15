@@ -91,8 +91,8 @@ vc-bench --rate 48000 --seconds 10
 - **Listening**: Original (no processing) / Removed (what is taken out) / Cleaned.
 - **Phono preamp**: External / Built-in (RIAA), phono gain, rumble filter.
 - **Sensitivity**: clicks and crackles 0 to 5, music protection.
-- **Levels**: input and output meters, loudness, dynamic range and peak/average over the last minute.
-- **Recording**: file name, record / stop, list of recordings with download and delete.
+- **Levels** (foldable): meters with peak hold and latched clipping, level advice, balance, stereo / mono, background noise.
+- **Recording**: file name, **raw or cleaned** sound, record / stop, list of recordings with download and delete.
 - **Anti-distortion**: turntable and cartridge settings, tracking-error graph.
 - **Advanced settings**: separate declick / decrackle sensitivities, fine intensities, maximum click length,
   multiband / full band, linked / separate channels.
@@ -145,14 +145,21 @@ The **Clicks and crackles** slider sets the declicker and the decrackler togethe
 - **Repair**: Multiband (default) or Full band.
 - **Stereo**: Linked channels (default) or Separate channels.
 
-### Levels and dynamic range
+### Levels
 
-Measured **on the output, over the last minute** (EBU R128):
+The **Levels** card can be folded (its title then shows the advice only).
 
-- **Loudness (3 s)** in LUFS: the perceived volume right now.
-- **Dynamic range (LRA)** in LU: the spread between soft and loud passages. Typical values: 3 to 6 LU for
-  compressed rock or pop, 8 to 15 for jazz, 15 and more for classical music.
-- **Peak / average (PLR)** in dB: the larger it is, the less the music is squashed.
+- **Meters** with zones (green, then orange above −12 dB, red near 0 dB), marks at −12 and −6 dB, and a **peak hold**
+  that stays 2 seconds. A clip (0 dBFS) shows "CLIP" and a red message that **stays until you tap it**.
+- **Advice** in plain words from the last 20 seconds: good level, input too weak / too loud (sound card gain), or phono
+  gain to change when the built-in preamp is used.
+- **Record information** (measured on the turntable signal):
+  - **Balance L / R** over the last 30 s of music ("centered", or which side is louder; orange above 2 dB: cartridge
+    or cable to check);
+  - **Stereo / mono**: Mono, Stereo, Wide stereo, or **Phase?** when the channels are opposed (a cable or the cartridge
+    wired backwards on one side);
+  - **Background noise**: the quietest moment between two tracks (state of the record);
+  - **Peak / average** (PLR) over the last minute: the larger it is, the less the music is squashed.
 
 ---
 
@@ -192,8 +199,10 @@ On the control page, **Recording** card:
 1. Type the **file name** (for example "Artist - Album - Side A").
 2. **Record**, then **Stop** at the end of the side.
 
-- The file contains the **raw turntable sound** (without declick, with the RIAA correction if the built-in
-  preamp is selected), as **24-bit FLAC** (16 bits if the card works in 16 bits), with the title and date as tags.
+- **Sound to record**: **Raw** (the turntable sound without declick, with the RIAA correction if the built-in preamp
+  is selected) or **Cleaned** (after declick, decrackle and anti-distortion, whatever listening mode you choose). The
+  choice is shown next to the timer while recording. **24-bit FLAC** (raw: 16 bits if the card works in 16 bits), with
+  the title and date as tags.
 - You can **listen and adjust the cleaning** while recording: the recording is not affected.
 - Files are stored in `~/recordings` on the Pi. A name already taken gets "(2)", "(3)"… : nothing is ever
   overwritten. With an empty name: "Recording <date> <time>".

@@ -92,8 +92,8 @@ vc-bench --rate 48000 --seconds 10
 - **Écoute** : Original (sans traitement) / Enlevé (ce qui est retiré) / Nettoyé.
 - **Préampli phono** : Externe / Intégré (RIAA), gain phono, anti-rumble.
 - **Sensibilité** : clics et craquements 0 à 5, protection de la musique.
-- **Niveaux** : vu-mètres d'entrée et de sortie, sonie, plage dynamique et crête / moyenne de la dernière minute.
-- **Enregistrement** : nom du fichier, enregistrer / arrêter, liste des enregistrements avec téléchargement et suppression.
+- **Niveaux** (repliable) : vu-mètres avec crête maintenue et saturation mémorisée, conseil de réglage, équilibre, stéréo / mono, bruit de fond.
+- **Enregistrement** : nom du fichier, son **brut ou nettoyé**, enregistrer / arrêter, liste des enregistrements avec téléchargement et suppression.
 - **Anti-distorsion** : réglages de la platine et de la cellule, courbe de l'erreur d'angle.
 - **Paramètres avancés** : sensibilités séparées du déclick et du dé-crackle, intensités fines, longueur max d'un
   clic, multibande / pleine bande, canaux liés / séparés.
@@ -146,14 +146,22 @@ Le curseur **Clics et craquements** règle le déclick et le dé-crackle ensembl
 - **Réparation** : Multibande (défaut) ou Pleine bande.
 - **Stéréo** : Canaux liés (défaut) ou Canaux séparés.
 
-### Niveaux et plage dynamique
+### Niveaux
 
-Mesurés **sur la sortie, sur la dernière minute** (EBU R128) :
+La carte **Niveaux** se replie (son titre affiche alors seulement le conseil).
 
-- **Sonie (3 s)** en LUFS : le volume perçu en ce moment.
-- **Plage dynamique (LRA)** en LU : l'écart entre passages doux et forts. Repères : 3 à 6 LU pour du rock ou de la
-  pop compressés, 8 à 15 pour du jazz, 15 et plus pour du classique.
-- **Crête / moyenne (PLR)** en dB : plus c'est grand, moins la musique est écrasée.
+- **Vu-mètres** avec zones (vert, puis orange au-dessus de −12 dB, rouge près de 0 dB), repères à −12 et −6 dB, et
+  **crête maintenue** 2 secondes. Une saturation (0 dBFS) affiche « CLIP » et un message rouge qui **reste jusqu'à ce
+  que tu le touches**.
+- **Conseil** en clair d'après les 20 dernières secondes : bon niveau, entrée trop faible / trop forte (gain de la carte
+  son), ou gain phono à changer quand le préampli intégré est utilisé.
+- **Infos sur le disque** (mesurées sur le signal de la platine) :
+  - **Équilibre G / D** sur les 30 dernières secondes de musique (« centré », ou le côté le plus fort ; orange au-delà
+    de 2 dB : cellule ou câble à vérifier) ;
+  - **Stéréo / mono** : Mono, Stéréo, Stéréo large, ou **Phase ?** quand les canaux s'opposent (un câble ou la cellule
+    branché à l'envers d'un côté) ;
+  - **Bruit de fond** : le moment le plus calme entre deux morceaux (état du disque) ;
+  - **Crête / moyenne** (PLR) sur la dernière minute : plus c'est grand, moins la musique est écrasée.
 
 ---
 
@@ -196,8 +204,10 @@ Sur la page de réglage, carte **Enregistrement** :
 1. Écris le **nom du fichier** (par exemple « Artiste - Album - Face A »).
 2. **Enregistrer**, puis **Arrêter** à la fin de la face.
 
-- Le fichier contient le **son brut de la platine** (sans déclick, avec la correction RIAA si le préampli intégré
-  est choisi), en **FLAC 24 bits** (16 bits si la carte fonctionne en 16 bits), avec le titre et la date en étiquettes.
+- **Son à enregistrer** : **Brut** (le son de la platine sans déclick, avec la correction RIAA si le préampli intégré
+  est choisi) ou **Nettoyé** (après déclick, dé-crackle et anti-distorsion, quelle que soit l'écoute choisie). Le choix
+  est rappelé à côté du chronomètre pendant l'enregistrement. **FLAC 24 bits** (brut : 16 bits si la carte fonctionne
+  en 16 bits), avec le titre et la date en étiquettes.
 - Tu peux **écouter et régler le nettoyage** pendant l'enregistrement : l'enregistrement n'est pas touché.
 - Les fichiers sont dans `~/recordings` sur le Pi. Un nom déjà pris reçoit « (2) », « (3) »… : rien n'est jamais
   écrasé. Sans nom : « Recording <date> <heure> ».

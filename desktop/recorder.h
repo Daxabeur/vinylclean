@@ -31,7 +31,8 @@ public:
 
     // ---- Main thread ----
     // Starts recording into `path` (FLAC file). bits = 16 or 24.
-    bool start(const std::string& path, unsigned rate, int channels, int bits, const std::string& title, std::string& err) {
+    bool start(const std::string& path, unsigned rate, int channels, int bits, const std::string& title, std::string& err,
+               const std::string& comment = "Raw recording (no processing) — vinylclean") {
         stop();
         if (channels < 1 || channels > 2 || (bits != 16 && bits != 24) || rate < 8000) { err = "unsupported format"; return false; }
         enc_ = FLAC__stream_encoder_new();
@@ -53,7 +54,7 @@ public:
             add("TITLE", title);
             char d[32]; const std::time_t t = std::time(nullptr); std::strftime(d, sizeof d, "%Y-%m-%d", std::localtime(&t));
             add("DATE", d);
-            add("COMMENT", "Raw recording (no processing) — vinylclean");
+            add("COMMENT", comment);
             meta_[1]->length = 8192;
             FLAC__stream_encoder_set_metadata(enc_, meta_, 2);
         }

@@ -64,7 +64,9 @@ public:
     int  hopSize() const { return dc_.hopSize(); }
     int  channels() const { return nch_; }
     void setParams(const ChainParams& p);
-    void process(const float* const* in, float* const* out, int n);
+    // repaired (optional): also receives the cleaned signal (Repair), whatever the
+    // listening mode — used to record the cleaned sound.
+    void process(const float* const* in, float* const* out, int n, float* const* repaired = nullptr);
     DeclickStats declickStats() const { return dc_.stats(); }
     DeclickStats decrackleStats() const { return cr_.stats(); }
     AntiDistState distState() const { return ad_.state(); }

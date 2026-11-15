@@ -46,7 +46,22 @@
     border-radius: 50%; background: var(--acc); border: 0; }
   input[type=range]::-moz-range-thumb { width: 30px; height: 30px; border-radius: 50%; background: var(--acc); border: 0; }
   .meters { display: grid; grid-template-columns: auto 1fr auto; gap: 6px 10px; align-items: center; font-size: 13px; }
-  .bar { height: 12px; border-radius: 6px; background: var(--line); overflow: hidden; }
+  .bar { height: 12px; border-radius: 6px; overflow: hidden; position: relative;
+    /* zones: green up to −12 dB, orange to −1 dB, red above (scale −60 … 0 dB) */
+    background: linear-gradient(90deg, #26352b 0 80%, #3a3222 80% 98.3%, #45231f 98.3% 100%); }
+  .bar::before, .bar::after { content: ""; position: absolute; top: 0; bottom: 0; width: 1px; background: #5a5f69; z-index: 2; }
+  .bar::before { left: 80%; } .bar::after { left: 90%; }   /* −12 and −6 dB */
+  .bar .hold { position: absolute; top: 0; bottom: 0; width: 3px; margin-left: -3px; background: var(--ok); z-index: 3; display: none; }
+  .bar .hold.hot { background: var(--warn); } .bar .hold.clip { background: var(--bad); }
+  .db.clip { color: var(--bad); font-weight: 700; }
+  .ticks { position: relative; height: 13px; font-size: 11px; color: var(--dim); }
+  .ticks span { position: absolute; top: -2px; transform: translateX(-50%); }
+  .clipwarn { margin-top: 10px; padding: 8px 10px; border-radius: 10px; background: #4a1f1a; color: #ffd1c9; border: 1px solid var(--bad);
+    font-weight: 600; font-size: 14px; cursor: pointer; }
+  .advice { margin: 10px 0 0; font-weight: 600; font-size: 14px; }
+  .advice.ok { color: var(--ok); } .advice.warn { color: var(--warn); } .advice.bad { color: var(--bad); } .advice.dim { color: var(--dim); }
+  #lvBox summary .lvsum { font-weight: 500; font-size: 14px; margin-left: 8px; }
+  .stats b.warn { color: var(--warn); }
   .bar i { display: block; height: 100%; width: 0; background: var(--ok); transition: width .08s linear; }
   .bar i.hot { background: var(--warn); } .bar i.clip { background: var(--bad); }
   .db { font-variant-numeric: tabular-nums; color: var(--dim); min-width: 52px; text-align: right; }
@@ -170,19 +185,26 @@
     <p class="note" data-i18n="sens.note"></p>
   </section>
 
-  <section class="card">
-    <h2 data-i18n="levels.title"></h2>
-    <div class="meters">
-      <span data-i18n="levels.inL"></span><div class="bar"><i id="mInL"></i></div><span class="db" id="dInL">–</span>
-      <span data-i18n="levels.inR"></span><div class="bar"><i id="mInR"></i></div><span class="db" id="dInR">–</span>
-      <span data-i18n="levels.outL"></span><div class="bar"><i id="mOutL"></i></div><span class="db" id="dOutL">–</span>
-      <span data-i18n="levels.outR"></span><div class="bar"><i id="mOutR"></i></div><span class="db" id="dOutR">–</span>
+  <section class="card" id="lvCard">
+    <details id="lvBox" open>
+    <summary><span data-i18n="levels.title"></span><span class="lvsum" id="lvSum"></span></summary>
+    <div class="meters" style="margin-top:10px">
+      <span data-i18n="levels.inL"></span><div class="bar"><i id="mInL"></i><b class="hold" id="hInL"></b></div><span class="db" id="dInL">–</span>
+      <span data-i18n="levels.inR"></span><div class="bar"><i id="mInR"></i><b class="hold" id="hInR"></b></div><span class="db" id="dInR">–</span>
+      <span data-i18n="levels.outL"></span><div class="bar"><i id="mOutL"></i><b class="hold" id="hOutL"></b></div><span class="db" id="dOutL">–</span>
+      <span data-i18n="levels.outR"></span><div class="bar"><i id="mOutR"></i><b class="hold" id="hOutR"></b></div><span class="db" id="dOutR">–</span>
+      <span></span><div class="ticks"><span style="left:0;transform:none">−60</span><span style="left:50%">−30</span><span style="left:80%">−12</span><span style="left:90%">−6</span><span style="left:100%;transform:translateX(-100%)">0</span></div><span class="db" style="font-size:11px">dB</span>
     </div>
-    <div class="stats" style="margin-top:12px;grid-template-columns:repeat(2,1fr)">
-      <div><b id="sLufs">–</b><span data-i18n="levels.lufs"></span></div>
+    <div class="clipwarn" id="clipLatch" hidden></div>
+    <p class="advice" id="lvAdvice"></p>
+    <div class="stats" style="margin-top:12px;grid-template-columns:repeat(4,1fr)">
+      <div><b id="sBal">–</b><span data-i18n="levels.bal"></span></div>
+      <div><b id="sCorr">–</b><span data-i18n="levels.corr"></span></div>
+      <div><b id="sNoise">–</b><span data-i18n="levels.noise"></span></div>
       <div><b id="sPlr">–</b><span data-i18n="levels.plr"></span></div>
     </div>
-    <p class="note" id="loudNote"></p>
+    <p class="note" data-i18n="levels.note"></p>
+    </details>
   </section>
 
   <section class="card">
@@ -345,7 +367,14 @@
     <h2 data-i18n="rec.title"></h2>
     <label for="recName" data-i18n="rec.name"></label>
     <input type="text" id="recName" maxlength="150" autocomplete="off">
-    <div class="recrow" style="margin-top:10px">
+    <div class="row">
+      <label data-i18n="rec.source"></label>
+      <div class="seg" id="recClean" style="margin-top:6px">
+        <button data-v="0"><span data-i18n="rec.raw"></span><small data-i18n="rec.raw.s"></small></button>
+        <button data-v="1"><span data-i18n="rec.clean"></span><small data-i18n="rec.clean.s"></small></button>
+      </div>
+    </div>
+    <div class="recrow" style="margin-top:12px">
       <button class="btn rec" id="recStart"><span class="rd"></span><span data-i18n="rec.start"></span></button>
       <button class="btn stop" id="recStop" disabled><span class="sq"></span><span data-i18n="rec.stop"></span></button>
     </div>
@@ -396,10 +425,21 @@ const I18N = {
     "prot.none": "None", "prot.normal": "Normal", "prot.max": "Maximum",
     "sens.note": "0 = off. 1 to 5: more and more sensitive. Separate declick and decrackle settings: “Advanced settings”. To remove more large clicks: protection “None”.",
     "levels.title": "Levels", "levels.inL": "Input L", "levels.inR": "Input R", "levels.outL": "Output L", "levels.outR": "Output R",
-    "levels.lufs": "loudness (3 s)", "levels.plr": "peak / average",
-    "levels.note": "Loudness (EBU R128) and peak-to-loudness ratio, over the last minute.",
-    "levels.partial": "Measured over {0} s (one minute for the full value).",
-    "rec.title": "Recording", "rec.name": "File name", "rec.placeholder": "e.g. Artist - Album - Side A",
+    "levels.plr": "peak / average", "levels.bal": "balance L / R", "levels.corr": "stereo / mono", "levels.noise": "background noise",
+    "levels.note": "Balance and stereo are measured on the turntable signal; background noise is the quietest moment between two tracks (state of the record). Peak / average: over the last minute.",
+    "levels.clip.in": "⚠ The input clipped (0 dBFS): lower the input gain of the sound card. Tap to clear.",
+    "levels.clip.out": "⚠ The output clipped (0 dBFS): lower the phono gain. Tap to clear.",
+    "levels.adv.none": "No signal", "levels.adv.ok": "Good level",
+    "levels.adv.lowCard": "Weak input: raise the input gain of the sound card", "levels.adv.bitLowCard": "Input a bit weak: you can raise the sound card gain",
+    "levels.adv.highCard": "Too loud: lower the input gain of the sound card",
+    "levels.adv.lowPhono": "Weak level: raise the phono gain (Advanced settings)", "levels.adv.highPhono": "Too loud: lower the phono gain (Advanced settings)",
+    "levels.centered": "centered", "levels.left": "L +{0} dB", "levels.right": "R +{0} dB",
+    "levels.mono": "Mono", "levels.stereo": "Stereo", "levels.wide": "Wide stereo", "levels.phase": "Phase?",
+    "levels.phase.t": "The two channels are opposed: a cable or the cartridge may be wired backwards on one side.",
+    "rec.title": "Recording", "rec.name": "File name", "rec.source": "Sound to record",
+    "rec.raw": "Raw", "rec.raw.s": "no cleaning", "rec.clean": "Cleaned", "rec.clean.s": "with declick",
+    "rec.note.clean": "Sound after cleaning (declick, decrackle, anti-distortion if on), as 24-bit FLAC, whatever you are listening to.",
+    "rec.now.raw": "raw", "rec.now.clean": "cleaned", "rec.placeholder": "e.g. Artist - Album - Side A",
     "rec.start": "Record", "rec.stop": "Stop",
     "rec.note": "Turntable sound without declick (with the RIAA correction if the built-in preamp is selected), as 24-bit FLAC. You can listen and adjust the cleaning while recording.",
     "rec.lost": "Warning: the disk could not keep up, a few fractions of a second are missing.",
@@ -461,10 +501,21 @@ const I18N = {
     "prot.none": "Aucune", "prot.normal": "Normale", "prot.max": "Maximale",
     "sens.note": "0 = désactivé. 1 à 5 : de plus en plus sensible. Réglage séparé du déclick et du dé-crackle : « Paramètres avancés ». Pour enlever plus de gros clics : protection « Aucune ».",
     "levels.title": "Niveaux", "levels.inL": "Entrée G", "levels.inR": "Entrée D", "levels.outL": "Sortie G", "levels.outR": "Sortie D",
-    "levels.lufs": "sonie (3 s)", "levels.plr": "crête / moyenne",
-    "levels.note": "Sonie (norme EBU R128) et écart crête / sonie moyenne, sur la dernière minute.",
-    "levels.partial": "Mesure sur {0} s (une minute pour la valeur complète).",
-    "rec.title": "Enregistrement", "rec.name": "Nom du fichier", "rec.placeholder": "ex. Artiste - Album - Face A",
+    "levels.plr": "crête / moyenne", "levels.bal": "équilibre G / D", "levels.corr": "stéréo / mono", "levels.noise": "bruit de fond",
+    "levels.note": "Équilibre et stéréo sont mesurés sur le signal de la platine ; le bruit de fond est le moment le plus calme entre deux morceaux (état du disque). Crête / moyenne : sur la dernière minute.",
+    "levels.clip.in": "⚠ L'entrée a saturé (0 dBFS) : baisse le gain d'entrée de la carte son. Touche pour effacer.",
+    "levels.clip.out": "⚠ La sortie a saturé (0 dBFS) : baisse le gain phono. Touche pour effacer.",
+    "levels.adv.none": "Pas de signal", "levels.adv.ok": "Bon niveau",
+    "levels.adv.lowCard": "Entrée faible : monte le gain d'entrée de la carte son", "levels.adv.bitLowCard": "Entrée un peu faible : tu peux monter le gain de la carte",
+    "levels.adv.highCard": "Trop fort : baisse le gain d'entrée de la carte son",
+    "levels.adv.lowPhono": "Niveau faible : monte le gain phono (Paramètres avancés)", "levels.adv.highPhono": "Trop fort : baisse le gain phono (Paramètres avancés)",
+    "levels.centered": "centré", "levels.left": "G +{0} dB", "levels.right": "D +{0} dB",
+    "levels.mono": "Mono", "levels.stereo": "Stéréo", "levels.wide": "Stéréo large", "levels.phase": "Phase ?",
+    "levels.phase.t": "Les deux canaux s'opposent : un câble ou la cellule est peut-être branché à l'envers d'un côté.",
+    "rec.title": "Enregistrement", "rec.name": "Nom du fichier", "rec.source": "Son à enregistrer",
+    "rec.raw": "Brut", "rec.raw.s": "sans nettoyage", "rec.clean": "Nettoyé", "rec.clean.s": "avec déclick",
+    "rec.note.clean": "Son après nettoyage (déclick, dé-crackle, anti-distorsion si activée), en FLAC 24 bits, quelle que soit l'écoute choisie.",
+    "rec.now.raw": "brut", "rec.now.clean": "nettoyé", "rec.placeholder": "ex. Artiste - Album - Face A",
     "rec.start": "Enregistrer", "rec.stop": "Arrêter",
     "rec.note": "Son de la platine sans déclick (avec la correction RIAA si le préampli intégré est choisi), en FLAC 24 bits. Tu peux écouter et régler le nettoyage pendant l'enregistrement.",
     "rec.lost": "Attention : le disque n'a pas suivi, quelques fractions de seconde manquent.",
@@ -569,6 +620,7 @@ function render() {
   $("riaaNote").textContent = t(S.riaa ? "phono.note.on" : "phono.note.off");
   if (dragging !== "phonoGain") $("phonoGain").value = S.phonoGain;
   $("vPhonoGain").textContent = "+" + Math.round(S.phonoGain || 0) + " dB";
+  seg("recClean", S.recClean ? 1 : 0);
   seg("mode", S.mode); seg("protect", S.protect); seg("multiband", S.multiband); seg("stereo", S.stereo);
   seg("sens", S.sens); $("tSens").textContent = S.sens < 0 ? t("custom") : "";
   seg("sensDeclick", S.sensDeclick); seg("sensDecrackle", S.sensDecrackle);
@@ -636,12 +688,69 @@ function adStatus() {
   $("adState").textContent = s;
   if (St.adR > 0) drawTerr(armGeo());
 }
+// ---- Levels: meters with peak hold (2 s), latched clipping, advice, record info ----
+const HOLD = {}, PEAKS = [];   // PEAKS: [time, input max, output max] of the last 20 s
+let clipIn = false, clipOut = false;
 function meter(bar, txt, db) {
-  const pct = Math.max(0, Math.min(100, (db + 60) / 60 * 100));
-  const el = $(bar); el.style.width = pct + "%";
-  el.className = db > -1 ? "clip" : db > -12 ? "hot" : "";
-  $(txt).textContent = db <= -119 ? "–∞" : db.toFixed(0) + " dB";
+  const pc = d => Math.max(0, Math.min(100, (d + 60) / 60 * 100));
+  const cls = d => d > -1 ? "clip" : d > -12 ? "hot" : "";
+  const el = $(bar); el.style.width = pc(db) + "%"; el.className = cls(db);
+  const now = Date.now(), h = HOLD[bar] || {db: -120, t: 0};
+  if (db >= h.db || now - h.t > 2000) { h.db = db; h.t = now; }
+  HOLD[bar] = h;
+  const hb = $("h" + bar.slice(1));
+  hb.style.display = h.db > -60 ? "block" : "none";
+  hb.style.left = pc(h.db) + "%"; hb.className = "hold " + cls(h.db);
+  $(txt).textContent = h.db >= -0.1 ? "CLIP" : db <= -119 ? "–∞" : db.toFixed(0) + " dB";
+  $(txt).className = "db" + (h.db >= -0.1 ? " clip" : "");
 }
+function levelsStatus() {
+  meter("mInL", "dInL", St.inL); meter("mInR", "dInR", St.inR);
+  meter("mOutL", "dOutL", St.outL); meter("mOutR", "dOutR", St.outR);
+  const now = Date.now(), inMax = Math.max(St.inL, St.inR), outMax = Math.max(St.outL, St.outR);
+  PEAKS.push([now, inMax, outMax]);
+  while (PEAKS.length && now - PEAKS[0][0] > 20000) PEAKS.shift();
+  if (St.running && (St.sat || inMax >= -0.1)) clipIn = true;
+  if (St.running && outMax >= -0.1) clipOut = true;
+  const cw = $("clipLatch");
+  cw.hidden = !clipIn && !clipOut;
+  cw.textContent = clipIn ? t("levels.clip.in") : clipOut ? t("levels.clip.out") : "";
+  // Advice from the loudest moment of the last 20 s.
+  let mi = -120, mo = -120;
+  for (const p of PEAKS) { mi = Math.max(mi, p[1]); mo = Math.max(mo, p[2]); }
+  let key = "", cls = "ok";
+  if (!St.running) key = "";
+  else if (S.riaa) {
+    if (mo < -70) { key = "levels.adv.none"; cls = "dim"; }
+    else if (clipIn) { key = "levels.adv.highCard"; cls = "bad"; }
+    else if (mo >= -0.5) { key = "levels.adv.highPhono"; cls = "bad"; }
+    else if (mo < -24) { key = "levels.adv.lowPhono"; cls = "warn"; }
+    else key = "levels.adv.ok";
+  } else {
+    if (mi < -70) { key = "levels.adv.none"; cls = "dim"; }
+    else if (mi >= -0.5 || clipIn) { key = "levels.adv.highCard"; cls = "bad"; }
+    else if (mi < -24) { key = "levels.adv.lowCard"; cls = "warn"; }
+    else if (mi < -15) { key = "levels.adv.bitLowCard"; cls = "warn"; }
+    else key = "levels.adv.ok";
+  }
+  $("lvAdvice").textContent = key ? (cls === "ok" ? "✓ " : cls === "dim" ? "" : "⚠ ") + t(key) : "";
+  $("lvAdvice").className = "advice " + cls;
+  $("lvSum").textContent = key ? "· " + t(key) : "";
+  $("lvSum").className = "lvsum advice " + cls;
+  // Record information.
+  const b = St.bal, c = St.corr;
+  $("sBal").textContent = b == null ? "–" : Math.abs(b) < 0.5 ? t("levels.centered") : t(b > 0 ? "levels.left" : "levels.right", fr(Math.abs(b), 1));
+  $("sBal").className = b != null && Math.abs(b) > 2 ? "warn" : "";
+  $("sCorr").textContent = c == null ? "–" : c >= 0.95 ? t("levels.mono") : c >= 0.3 ? t("levels.stereo") : c >= -0.1 ? t("levels.wide") : t("levels.phase");
+  $("sCorr").className = c != null && c < -0.1 ? "warn" : "";
+  $("sCorr").title = c == null ? "" : (c < -0.1 ? t("levels.phase.t") + " " : "") + "r = " + fr(c, 2);
+  $("sNoise").textContent = St.noise == null ? "–" : St.noise + " dB";
+  const ok = St.running && St.loudSec >= 10 && St.lufsS > -70;
+  $("sPlr").textContent = ok ? fr(St.plr, 1) + " dB" : "–";
+}
+$("clipLatch").addEventListener("click", () => { clipIn = clipOut = false; for (const k in HOLD) HOLD[k] = {db: -120, t: 0}; levelsStatus(); });
+$("lvBox").addEventListener("toggle", () => { try { localStorage.setItem("vc.lvOpen", $("lvBox").open ? "1" : "0"); } catch (e) {} });
+try { if (localStorage.getItem("vc.lvOpen") === "0") $("lvBox").open = false; } catch (e) {}
 // ---- Recording ----
 const esc = s => String(s).replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
 const dur = s => { if (!(s >= 0)) return "?"; s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = s % 60;
@@ -661,11 +770,12 @@ function recStatus() {
   $("recStart").disabled = on || !St.running;
   $("recStop").disabled = !on;
   $("recName").disabled = on;
+  for (const b of $("recClean").querySelectorAll("button")) b.disabled = on;
   $("recState").hidden = !on;
-  if (on) { $("recTime").textContent = dur(St.recSec); $("recFile").textContent = St.recName || ""; }
+  if (on) { $("recTime").textContent = dur(St.recSec); $("recFile").textContent = (St.recName || "") + " · " + t(St.recClean ? "rec.now.clean" : "rec.now.raw"); }
   let n = recMessage(St.recMsg);
   if (on && St.recLost > 0) n = t("rec.lost");
-  $("recNote").textContent = n || t("rec.note");
+  $("recNote").textContent = n || t(S.recClean ? "rec.note.clean" : "rec.note");
   $("recNote").className = "note" + (n ? " warn" : "");
 }
 function renderRecs() {
@@ -704,8 +814,7 @@ function errText(e) {
 function status() {
   if (St.running === undefined) return;
   recStatus(); adStatus();
-  meter("mInL", "dInL", St.inL); meter("mInR", "dInR", St.inR);
-  meter("mOutL", "dOutL", St.outL); meter("mOutR", "dOutR", St.outR);
+  levelsStatus();
   $("sat").classList.toggle("show", !!St.sat);
   $("satPhono").classList.toggle("show", !!St.satPhono);
   let e = errText(St.error || "");
@@ -715,10 +824,6 @@ function status() {
   $("sClicks").textContent = St.clicks; $("sCrackles").textContent = St.crackles;
   $("sLoad").textContent = St.running ? Math.round(St.load) + " %" : "–";
   $("sXruns").textContent = St.xruns;
-  const ok = St.running && St.loudSec >= 3 && St.lufsS > -70;
-  $("sLufs").textContent = ok ? Math.round(St.lufsS) + " LUFS" : "–";
-  $("sPlr").textContent = ok && St.loudSec >= 10 ? fr(St.plr, 1) + " dB" : "–";
-  $("loudNote").textContent = St.loudSec < 60 ? t("levels.partial", Math.round(St.loudSec || 0)) : t("levels.note");
   $("info").textContent = St.running ? fr(St.rate / 1000, St.rate % 1000 ? 1 : 0) + " kHz · " + St.format + " · " + St.latency + " ms"
                                      : t("stopped");
 }
@@ -760,7 +865,7 @@ function updateRates() {
   $("cardNote").className = "note" + (two ? " warn" : "");
 }
 
-for (const id of ["mode", "protect", "sens", "sensDeclick", "sensDecrackle", "multiband", "stereo", "riaa", "rumble", "ad", "autoPos"]) {
+for (const id of ["mode", "protect", "sens", "sensDeclick", "sensDecrackle", "multiband", "stereo", "riaa", "rumble", "ad", "autoPos", "recClean"]) {
   $(id).addEventListener("click", e => {
     const b = e.target.closest("button"); if (!b) return;
     const v = +b.dataset.v;
