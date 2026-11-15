@@ -25,6 +25,7 @@ Platine → (préampli phono) → carte son USB → Pi : vc-live → sortie de l
   Löfgren B ou sur mesure) et ta pointe ; le logiciel calcule et retire la distorsion de lecture.
 - Sonie, plage dynamique (EBU R128) et écart crête / sonie de la dernière minute.
 - **Page de réglage bilingue** (anglais / français), synchronisée sur tous les écrans ouverts.
+- **Version de bureau** pour Windows (.exe) et Linux (AppImage), avec **nettoyage de fichiers** (WAV / FLAC).
 
 Création originale (« clean-room ») : aucun code d'un logiciel de restauration commercial n'a été utilisé,
 décompilé ou imité. Seules des méthodes publiées sont utilisées ; les sources sont en fin de document.
@@ -343,6 +344,37 @@ La sortie est alignée sur l'entrée (latence compensée) : les deux fichiers se
 
 ---
 
+## Version de bureau (Windows et Linux)
+
+Le même nettoyage sur un ordinateur, avec la même page de réglage dans sa propre fenêtre, plus une carte **Nettoyer un fichier**.
+
+**Téléchargement** (page « Releases » du dépôt GitHub) :
+- **Windows** : `vinylclean-<version>-windows-x64.exe` — un seul fichier portable, rien à installer. Double-clic.
+  Windows SmartScreen peut prévenir d'un éditeur inconnu (le programme n'est pas signé) : « Informations complémentaires »
+  → « Exécuter quand même ».
+- **Linux** : `vinylclean-<version>-x86_64.AppImage` — rends-le exécutable (`chmod +x vinylclean-*.AppImage`) et lance-le.
+  Fonctionne sur les distributions avec glibc 2.27 ou plus récente (Ubuntu 18.04+, Debian 10+, Fedora…).
+
+**Temps réel** : dans « Carte son et qualité », choisis l'entrée (ta carte son) et la sortie (enceintes ou casque). Tout le
+reste fonctionne comme sur le Pi : sensibilité, protection, préampli phono intégré, anti-distorsion, enregistrement FLAC
+(dans `Musique/vinylclean`). Latence d'environ 60 à 100 ms.
+
+**Nettoyer un fichier** : choisis un fichier WAV ou FLAC, le format de sortie (WAV ou FLAC), puis **Nettoyer**. Les réglages
+actuels sont utilisés (sensibilité, protection, préampli phono, anti-distorsion ; le fichier est traité comme une face depuis
+son début). À la fin, écoute **Original / Nettoyé** au même endroit, puis **Télécharger**. Une face de 20 minutes prend environ
+une minute. Tout reste sur ton ordinateur.
+
+La page s'ouvre dans une fenêtre d'application (Edge sous Windows, Chromium / Chrome sous Linux), ou dans ton navigateur par
+défaut. Fermer la fenêtre quitte le programme (sauf pendant un enregistrement). Options : `--browser` (navigateur par défaut),
+`--lan` (ouvrir la page depuis un téléphone du même réseau), `--clean ENTRÉE SORTIE` (nettoyer un fichier sans fenêtre).
+
+Le programme de bureau utilise exactement le même code de traitement (`core/`) ; un WAV nettoyé sous Windows est identique au
+bit près au même fichier nettoyé par `vc-file` sur un PC. Entrée/sortie audio : [miniaudio](https://miniaud.io) (WASAPI sous
+Windows, PulseAudio / PipeWire / ALSA sous Linux). Code dans `desktop/` ; `desktop/build.sh` fabrique les deux fichiers depuis
+Linux. La version Raspberry Pi n'est pas modifiée.
+
+---
+
 ## Dépannage
 
 | Problème | Solution |
@@ -389,6 +421,7 @@ Le code (commentaires, messages, options) est en anglais ; la page de réglage e
 core/       DSP : ar, lsar, declick, decrackle (+ chaîne), antidist (anti-distorsion), riaa.h, presets.h
 tools/      vc_live.cpp, web_server.*, sha1.h, loudness.h, recorder.h, vc_file.cpp, vc_bench.cpp, wav.h, offline.h
 web/        index.html (page de réglage, anglais / français)
+desktop/    version Windows / Linux (vc_desktop.cpp, http_server.*, extra.html, build.sh, packaging/)
 tests/      test_declick.cpp, test_decrackle.cpp, test_loudness.cpp, test_recorder.cpp, test_riaa.cpp, test_antidist.cpp, synth.h
 scripts/    install.sh, kiosk-install.sh, services systemd, options par défaut
 cmake/      compilation croisée (PC → Pi), facultatif

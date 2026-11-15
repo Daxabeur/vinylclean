@@ -1,0 +1,4 @@
+#!/bin/sh
+# vinylclean AppImage entry point.
+HERE="$(dirname "$(readlink -f "$0")")"
+exec "$HERE/usr/bin/vinylclean" "$@"

@@ -21,3 +21,7 @@ settings.json
 .vscode/
 .idea/
 .DS_Store
+
+# Desktop build outputs
+build-desktop/
+dist/

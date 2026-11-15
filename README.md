@@ -24,6 +24,7 @@ Turntable → (phono preamp) → USB sound card → Pi: vc-live → sound card o
   and stylus type; the software computes and removes the playback distortion.
 - Loudness, dynamic range (EBU R128) and peak-to-loudness ratio of the last minute.
 - **Bilingual control page** (English / French), synchronized across all open screens.
+- **Desktop version** for Windows (.exe) and Linux (AppImage), with **file cleaning** (WAV / FLAC).
 
 Original work ("clean-room"): no code from any commercial restoration software was used, decompiled or imitated.
 Only published methods are used; the sources are listed at the end of this document.
@@ -337,6 +338,36 @@ The output is aligned with the input (latency compensated): both files can be co
 
 ---
 
+## Desktop version (Windows and Linux)
+
+The same cleaning on a computer, with the same control page in its own window, plus a **Clean a file** card.
+
+**Download** (Releases page of the GitHub repository):
+- **Windows**: `vinylclean-<version>-windows-x64.exe` — a single portable file, nothing to install. Double-click it.
+  Windows SmartScreen may warn about an unknown publisher (the program is not signed): "More info" → "Run anyway".
+- **Linux**: `vinylclean-<version>-x86_64.AppImage` — make it executable (`chmod +x vinylclean-*.AppImage`) and run it.
+  Works on distributions with glibc 2.27 or newer (Ubuntu 18.04+, Debian 10+, Fedora…).
+
+**Real time**: in "Sound card and quality", choose the input (your sound card) and the output (speakers or headphones).
+Everything else works like on the Pi: sensitivity, protection, built-in phono preamp, anti-distortion, FLAC recording
+(saved in `Music/vinylclean`). Latency is about 60 to 100 ms.
+
+**Clean a file**: choose a WAV or FLAC file, the output format (WAV or FLAC), then **Clean**. The current settings are
+used (sensitivity, protection, phono preamp, anti-distortion; the file is treated as one side from its start). When it is
+done, listen to **Original / Cleaned** at the same position, then **Download**. A 20-minute side takes about a minute.
+Everything stays on your computer.
+
+The page opens in an app window (Edge on Windows, Chromium / Chrome on Linux), or in your default browser. Closing the
+window quits the program (unless a recording is in progress). Options: `--browser` (default browser), `--lan` (open the
+page from a phone on the same network), `--clean IN OUT` (clean a file without the window).
+
+The desktop program uses exactly the same DSP code (`core/`); a WAV cleaned on Windows is bit-identical to the same file
+cleaned by `vc-file` on a PC. Sound input/output: [miniaudio](https://miniaud.io) (WASAPI on Windows, PulseAudio /
+PipeWire / ALSA on Linux). Source code in `desktop/`; `desktop/build.sh` builds both files from Linux. The Raspberry Pi
+version is not affected.
+
+---
+
 ## Troubleshooting
 
 | Problem | Solution |
@@ -381,6 +412,7 @@ variables.
 core/       DSP: ar, lsar, declick, decrackle (+ chain), antidist (anti-distortion), riaa.h, presets.h
 tools/      vc_live.cpp, web_server.*, sha1.h, loudness.h, recorder.h, vc_file.cpp, vc_bench.cpp, wav.h, offline.h
 web/        index.html (control page, English / French)
+desktop/    Windows / Linux version (vc_desktop.cpp, http_server.*, extra.html, build.sh, packaging/)
 tests/      test_declick.cpp, test_decrackle.cpp, test_loudness.cpp, test_recorder.cpp, test_riaa.cpp, test_antidist.cpp, synth.h
 scripts/    install.sh, kiosk-install.sh, systemd services, default options
 cmake/      cross-compilation (PC → Pi), optional
@@ -414,6 +446,7 @@ cd build && ctest
 - J. F. Kaiser, Kaiser window (oversampling half-band filter).
 - ITU-R BS.1770-4 (loudness, K-weighting); EBU R128, EBU Tech 3341 and 3342 (loudness range LRA).
 - Xiph.Org, libFLAC (FLAC format, RFC 9639).
+- D. Reid, miniaudio (desktop audio input/output, public domain / MIT-0).
 - I. Fette, A. Melnikov, RFC 6455 "The WebSocket Protocol", 2011; FIPS 180-1 (SHA-1).
 - ARM, FPCR register (AArch64): FZ bit for denormals.
 

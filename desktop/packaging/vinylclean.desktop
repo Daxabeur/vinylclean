@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=vinylclean
+GenericName=Vinyl cleaner
+Comment=Real-time vinyl declick, decrackle and phono preamp; cleans WAV/FLAC files
+Comment[fr]=Déclick, dé-crackle et préampli phono en temps réel ; nettoie les fichiers WAV/FLAC
+Exec=vinylclean
+Icon=vinylclean
+Categories=AudioVideo;Audio;
+Terminal=false

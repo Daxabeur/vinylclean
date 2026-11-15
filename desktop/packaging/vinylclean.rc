@@ -1,0 +1,23 @@
+#include <winuser.h>
+1 ICON "vinylclean.ico"
+1 RT_MANIFEST "vinylclean.manifest"
+1 VERSIONINFO
+FILEVERSION 1,3,0,0
+PRODUCTVERSION 1,3,0,0
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904B0"
+    BEGIN
+      VALUE "FileDescription", "vinylclean - vinyl declick, decrackle and phono preamp"
+      VALUE "ProductName", "vinylclean"
+      VALUE "FileVersion", "1.3.0"
+      VALUE "ProductVersion", "1.3.0"
+      VALUE "LegalCopyright", "MIT License"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x409, 1200
+  END
+END

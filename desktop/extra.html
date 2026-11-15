@@ -1,0 +1,191 @@
+
+<!-- ===== Desktop version only: "Clean a file" card (inserted by vinylclean desktop) ===== -->
+<style>
+  .fprog { height: 10px; border-radius: 5px; background: var(--line); overflow: hidden; margin-top: 10px; }
+  .fprog i { display: block; height: 100%; width: 0; background: var(--acc); transition: width .2s linear; }
+  #fileCard input[type=file] { width: 100%; margin-top: 6px; color: var(--txt); font: inherit; }
+  #fileCard input[type=file]::file-selector-button { min-height: 44px; border-radius: 10px; border: 1px solid var(--line);
+    background: #252931; color: var(--txt); font: inherit; font-weight: 600; padding: 0 14px; margin-right: 10px; cursor: pointer; }
+  #fileCard audio { width: 100%; margin-top: 10px; }
+  #fileCard .recrow .btn { flex: 1; }
+</style>
+<template id="fileTpl">
+  <section class="card" id="fileCard">
+    <h2 data-i18n="file.title"></h2>
+    <label for="fileIn" data-i18n="file.pick"></label>
+    <input type="file" id="fileIn" accept=".wav,.flac,audio/wav,audio/x-wav,audio/flac,audio/x-flac">
+    <div class="row">
+      <label data-i18n="file.fmt"></label>
+      <div class="seg" id="fileFmt" style="margin-top:6px">
+        <button data-v="wav">WAV</button><button data-v="flac">FLAC</button>
+      </div>
+    </div>
+    <div class="recrow" style="margin-top:12px">
+      <button class="btn rec" id="fileGo"><span data-i18n="file.go"></span></button>
+      <button class="btn stop" id="fileCancel" hidden><span data-i18n="file.cancel"></span></button>
+    </div>
+    <div class="fprog" id="fileProg" hidden><i id="fileBar"></i></div>
+    <p class="note" id="fileState"></p>
+    <div id="fileDone" hidden>
+      <div class="seg" id="fileAB" style="margin-top:10px">
+        <button data-v="o"><span data-i18n="listen.orig"></span><small data-i18n="file.before"></small></button>
+        <button data-v="c"><span data-i18n="listen.clean"></span><small data-i18n="file.after"></small></button>
+      </div>
+      <audio id="filePlayer" controls preload="metadata"></audio>
+      <div class="recrow" style="margin-top:10px">
+        <a class="btn" id="fileDl" href="/file/download" download><span data-i18n="file.download"></span></a>
+        <button class="btn" id="fileNew"><span data-i18n="file.new"></span></button>
+      </div>
+    </div>
+    <p class="note" data-i18n="file.note"></p>
+  </section>
+</template>
+<script>
+"use strict";
+(function () {
+  // ---- Texts of the desktop version (English / French) ----
+  Object.assign(I18N.en, {
+    "file.title": "Clean a file", "file.pick": "WAV or FLAC file", "file.fmt": "Cleaned file format",
+    "file.go": "Clean", "file.cancel": "Cancel", "file.before": "before", "file.after": "after",
+    "file.download": "⬇ Download", "file.new": "Another file",
+    "file.note": "Uses the current settings (sensitivity, protection, phono preamp, anti-distortion); the file is treated as one side from its start. Everything stays on this computer.",
+    "file.none": "Choose a file first.", "file.sending": "Loading the file… {0} %", "file.working": "Cleaning… {0} %",
+    "file.done": "Done: {0} — {1} clicks and {2} crackles repaired.", "file.err": "Error: {0}",
+    "file.e.no_space": "not enough disk space", "file.e.upload": "the file could not be loaded", "file.e.cancelled": "cancelled",
+    "file.e.busy": "a file is already being cleaned",
+    "card.heavy": "  ⚠ too heavy for this computer (≈ {0} %)", "card.default": "System default",
+    "recs.folder": "Folder: {0}",
+    "d.open": "cannot open the sound card at {0} Hz", "d.start": "the sound card does not start", "d.noaudio": "no audio system found",
+    "d.in": "input not found: {0}", "d.out": "output not found: {0}", "d.rate": "invalid sample rate"
+  });
+  Object.assign(I18N.fr, {
+    "file.title": "Nettoyer un fichier", "file.pick": "Fichier WAV ou FLAC", "file.fmt": "Format du fichier nettoyé",
+    "file.go": "Nettoyer", "file.cancel": "Annuler", "file.before": "avant", "file.after": "après",
+    "file.download": "⬇ Télécharger", "file.new": "Autre fichier",
+    "file.note": "Utilise les réglages actuels (sensibilité, protection, préampli phono, anti-distorsion) ; le fichier est traité comme une face, depuis son début. Tout reste sur cet ordinateur.",
+    "file.none": "Choisis d'abord un fichier.", "file.sending": "Chargement du fichier… {0} %", "file.working": "Nettoyage… {0} %",
+    "file.done": "Terminé : {0} — {1} clics et {2} craquements réparés.", "file.err": "Erreur : {0}",
+    "file.e.no_space": "pas assez de place sur le disque", "file.e.upload": "le fichier n'a pas pu être chargé", "file.e.cancelled": "annulé",
+    "file.e.busy": "un fichier est déjà en cours de nettoyage",
+    "card.heavy": "  ⚠ trop lourd pour cet ordinateur (≈ {0} %)", "card.default": "Périphérique par défaut",
+    "recs.folder": "Dossier : {0}",
+    "d.open": "impossible d'ouvrir la carte son à {0} Hz", "d.start": "la carte son ne démarre pas", "d.noaudio": "aucun système audio trouvé",
+    "d.in": "entrée introuvable : {0}", "d.out": "sortie introuvable : {0}", "d.rate": "fréquence d'échantillonnage invalide"
+  });
+
+  // ---- Card placed at the top of the second column ----
+  const card = document.getElementById("fileTpl").content.firstElementChild.cloneNode(true);
+  const cols = document.querySelectorAll(".col");
+  (cols[1] || cols[0]).prepend(card);
+
+  let F = {state: 0}, sending = -1, side = "c";
+  let fmt = "wav";
+  try { fmt = localStorage.getItem("vc.fileFmt") || "wav"; } catch (e) {}
+
+  function fileRender() {
+    seg("fileFmt", fmt); seg("fileAB", side);
+    const busy = sending >= 0 || F.state === 1 || F.state === 2;
+    $("fileGo").disabled = busy; $("fileIn").disabled = busy;
+    $("fileCancel").hidden = F.state !== 2;
+    $("fileProg").hidden = !busy;
+    const pct = sending >= 0 ? sending : Math.round((F.progress || 0) * 100);
+    $("fileBar").style.width = pct + "%";
+    let txt = "";
+    if (sending >= 0) txt = t("file.sending", pct);
+    else if (F.state === 2) txt = t("file.working", pct);
+    else if (F.state === 3) txt = t("file.done", F.out, F.clicks, F.crackles);
+    else if (F.state === 4) txt = t("file.err", I18N.en["file.e." + F.error] ? t("file.e." + F.error) : F.error);
+    $("fileState").textContent = txt;
+    $("fileState").className = "note" + (F.state === 4 ? " warn" : "");
+    const done = F.state === 3 && sending < 0;
+    if (done && $("fileDone").hidden) {
+      $("filePlayer").src = side === "o" ? "/file/original" : "/file/cleaned";
+      $("fileDl").setAttribute("download", F.out || "");
+    }
+    $("fileDone").hidden = !done;
+  }
+
+  $("fileFmt").addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    fmt = b.dataset.v;
+    try { localStorage.setItem("vc.fileFmt", fmt); } catch (err) {}
+    fileRender();
+  });
+  $("fileAB").addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b || b.dataset.v === side) return;
+    side = b.dataset.v;
+    const p = $("filePlayer"), at = p.currentTime, playing = !p.paused;
+    p.src = side === "o" ? "/file/original" : "/file/cleaned";
+    p.addEventListener("loadedmetadata", () => { p.currentTime = at; if (playing) p.play(); }, {once: true});
+    fileRender();
+  });
+  $("fileGo").addEventListener("click", () => {
+    const f = $("fileIn").files[0];
+    if (!f) { $("fileState").textContent = t("file.none"); return; }
+    $("filePlayer").removeAttribute("src"); $("fileDone").hidden = true;
+    sending = 0; fileRender();
+    const x = new XMLHttpRequest();
+    x.open("POST", "/upload?name=" + encodeURIComponent(f.name) + "&fmt=" + fmt);
+    x.upload.onprogress = e => { if (e.lengthComputable) { sending = Math.round(100 * e.loaded / e.total); fileRender(); } };
+    x.onloadend = () => {
+      sending = -1;
+      if (x.status !== 200) F = {state: 4, error: (x.responseText || "upload").trim() === "busy" ? "busy" : (x.responseText || "upload").trim()};
+      fileRender();
+    };
+    x.send(f);
+  });
+  $("fileCancel").addEventListener("click", () => send({cmd: "file_cancel"}));
+  $("fileNew").addEventListener("click", () => {
+    $("filePlayer").pause(); $("filePlayer").removeAttribute("src");
+    $("fileIn").value = ""; send({cmd: "file_clear"});
+  });
+
+  // File-cleaning messages: a second connection to the same server.
+  (function fileWs() {
+    const w = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
+    w.onmessage = ev => {
+      let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+      if (m.type === "file") { F = m; fileRender(); }
+      else if (m.type === "recs" && m.dir) { recsDir = m.dir; showFolder(); }
+    };
+    w.onclose = () => setTimeout(fileWs, 1500);
+  })();
+
+  // ---- Small adaptations of the shared page ----
+  let recsDir = "";
+  function showFolder() {
+    let p = document.getElementById("recsDir");
+    if (!p) { p = document.createElement("p"); p.className = "note"; p.id = "recsDir"; document.getElementById("recsCard").appendChild(p); }
+    p.textContent = recsDir ? t("recs.folder", recsDir) : "";
+  }
+  // Sound cards: the device name only ("default" translated).
+  fillCards = function () {
+    if (!cards.length || !S.in) return;
+    if (document.activeElement && ["inDev", "outDev", "rate"].includes(document.activeElement.id)) return;
+    const fill = (sel, dir, cur) => {
+      sel.innerHTML = "";
+      let found = false;
+      for (const c of cards) if (c[dir].length) {
+        const o = new Option(c.dev === "default" ? t("card.default") : c.name, c.dev);
+        if (c.dev === cur) { o.selected = true; found = true; }
+        sel.add(o);
+      }
+      if (!found) { const o = new Option(t("card.current", cur), cur); o.selected = true; sel.add(o); }
+    };
+    fill($("inDev"), "in", S.in); fill($("outDev"), "out", S.out);
+    updateRates();
+  };
+  // Error messages of the desktop program, in the page's language.
+  const baseErr = errText;
+  errText = function (e) {
+    e = e.replace(/cannot open the sound card at (\d+) Hz/, (m, r) => t("d.open", r))
+         .replace("the sound card does not start", t("d.start")).replace("no audio system found", t("d.noaudio"))
+         .replace(/input not found: (.*?)( — |$)/, (m, n, x) => t("d.in", n) + x).replace(/output not found: (.*?)( — |$)/, (m, n, x) => t("d.out", n) + x)
+         .replace("invalid sample rate", t("d.rate"));
+    return baseErr(e);
+  };
+  const baseApply = applyLang;
+  applyLang = function () { baseApply(); fileRender(); showFolder(); };
+  applyLang();
+})();
+</script>
