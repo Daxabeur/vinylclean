@@ -1,0 +1,10 @@
+# Options for the vinylclean-live service (see: vc-live --help).
+# Settings made on the web page (sensitivity, sound card, sample rate...)
+# are saved in ~/.config/vinylclean/settings.json and reloaded at startup:
+# normally there is nothing to put here.
+# An option written here OVERRIDES the saved setting at every start.
+#
+# Examples:  --http 8080          port of the control page
+#            --device hw:0,0      force the sound card
+# After editing:  sudo systemctl restart vinylclean-live
+VC_OPTS="--http 8080"

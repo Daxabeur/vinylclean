@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#14161a">
+<title>vinylclean</title>
+<!--
+  vinylclean control page (English / French). It is read from disk on every
+  load (/usr/local/share/vinylclean/index.html): it can be edited and the page
+  simply reloaded. No external library.
+-->
+<style>
+  :root {
+    --bg: #14161a; --card: #1d2026; --line: #2c3038; --txt: #e8e6e1; --dim: #9a9ea6;
+    --acc: #e0a85a; --ok: #6cbf84; --warn: #e0a85a; --bad: #e06a5a;
+    --r: 14px; --fs: 16px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--txt);
+    font: var(--fs)/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  body { padding: 12px; max-width: 760px; margin: 0 auto; user-select: none; -webkit-user-select: none; }
+  header { display: flex; align-items: center; gap: 10px; margin: 2px 2px 12px; }
+  header h1 { font-size: 20px; margin: 0; font-weight: 650; letter-spacing: .3px; }
+  header .info { margin-left: auto; color: var(--dim); font-size: 13px; text-align: right; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--bad); flex: none; }
+  .dot.on { background: var(--ok); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; margin-bottom: 12px; }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .8px; color: var(--dim); margin: 0 0 10px; font-weight: 600; }
+  .seg { display: flex; gap: 6px; }
+  .seg button { flex: 1; min-height: 52px; border-radius: 10px; border: 1px solid var(--line); background: #252931;
+    color: var(--txt); font: inherit; font-weight: 600; cursor: pointer; padding: 6px 4px; }
+  .seg button small { display: block; font-weight: 400; color: var(--dim); font-size: 12px; }
+  .seg button.sel { background: var(--acc); border-color: var(--acc); color: #1a1408; }
+  .seg button.sel small { color: #3b2c12; }
+  .seg.sens button { min-height: 46px; font-size: 18px; padding: 0; }
+  .row { margin: 14px 0 4px; }
+  .row label { display: flex; justify-content: space-between; font-weight: 600; }
+  .row label span { color: var(--acc); font-variant-numeric: tabular-nums; }
+  .row label span.lbl { color: inherit; }
+  .row p { margin: 2px 0 0; color: var(--dim); font-size: 13px; }
+  input[type=range] { width: 100%; height: 44px; margin: 4px 0 0; background: transparent; -webkit-appearance: none; appearance: none; }
+  input[type=range]::-webkit-slider-runnable-track { height: 8px; border-radius: 4px; background: var(--line); }
+  input[type=range]::-moz-range-track { height: 8px; border-radius: 4px; background: var(--line); }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 30px; height: 30px; margin-top: -11px;
+    border-radius: 50%; background: var(--acc); border: 0; }
+  input[type=range]::-moz-range-thumb { width: 30px; height: 30px; border-radius: 50%; background: var(--acc); border: 0; }
+  .meters { display: grid; grid-template-columns: auto 1fr auto; gap: 6px 10px; align-items: center; font-size: 13px; }
+  .bar { height: 12px; border-radius: 6px; background: var(--line); overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 0; background: var(--ok); transition: width .08s linear; }
+  .bar i.hot { background: var(--warn); } .bar i.clip { background: var(--bad); }
+  .db { font-variant-numeric: tabular-nums; color: var(--dim); min-width: 52px; text-align: right; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; text-align: center; }
+  .stats b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; }
+  .stats span { color: var(--dim); font-size: 12px; }
+  .alert { border-radius: var(--r); padding: 12px 14px; margin-bottom: 12px; font-weight: 600; display: none; }
+  .alert.show { display: block; }
+  .alert.sat { background: #4a1f1a; color: #ffd1c9; border: 1px solid var(--bad); }
+  .alert.err { background: #3a2f16; color: #ffe3b0; border: 1px solid var(--warn); }
+  select, .btn { width: 100%; min-height: 48px; border-radius: 10px; border: 1px solid var(--line); background: #252931;
+    color: var(--txt); font: inherit; padding: 0 10px; margin-top: 6px; }
+  .btn { background: var(--acc); color: #1a1408; font-weight: 700; border: 0; cursor: pointer; margin-top: 12px; }
+  details summary { cursor: pointer; font-weight: 600; list-style: none; }
+  details summary::after { content: " ▾"; color: var(--dim); }
+  .note { color: var(--dim); font-size: 13px; margin: 8px 0 0; }
+  .note.warn { color: var(--warn); }
+  /* Landscape touchscreen (e.g. 800 × 480): two columns, no scrolling. */
+  @media (min-width: 700px) and (orientation: landscape) {
+    body { max-width: none; display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; padding: 8px 10px; }
+    header, .alert { grid-column: 1 / -1; }
+    header { margin: 0 2px 6px; }
+    .card { margin-bottom: 8px; padding: 9px 12px; }
+    .card h2 { margin-bottom: 6px; }
+    .seg button { min-height: 44px; }
+    .row { margin: 6px 0 0; }
+    input[type=range] { height: 34px; margin: 0; }
+    .meters { gap: 3px 8px; }
+    .stats b { font-size: 18px; }
+  }
+  @media (max-height: 520px) and (orientation: landscape) {
+    .seg button small { display: none; }
+    .seg button { min-height: 42px; }
+  }
+  body.kiosk { --fs: 17px; }
+  [hidden] { display: none !important; }
+  /* Recording */
+  .recrow { display: flex; gap: 8px; align-items: center; }
+  input[type=text] { width: 100%; min-height: 46px; border-radius: 10px; border: 1px solid var(--line); background: #252931;
+    color: var(--txt); font: inherit; padding: 0 12px; user-select: text; -webkit-user-select: text; }
+  input[type=text]:disabled { opacity: .55; }
+  .btn { min-height: 52px; border-radius: 10px; border: 1px solid var(--line); background: #252931; color: var(--txt);
+    font: inherit; font-weight: 600; padding: 0 14px; cursor: pointer; text-decoration: none; display: inline-flex;
+    align-items: center; justify-content: center; gap: 6px; }
+  .btn:disabled { opacity: .4; cursor: default; }
+  .btn.rec { flex: 1; }
+  .btn.rec .rd { width: 14px; height: 14px; border-radius: 50%; background: var(--bad); }
+  .btn.stop { flex: 1; }
+  .btn.stop .sq { width: 13px; height: 13px; background: var(--txt); border-radius: 2px; }
+  .btn.small { min-height: 42px; font-weight: 500; font-size: 15px; }
+  .btn.danger { color: var(--bad); }
+  .btn.confirm { background: var(--bad); border-color: var(--bad); color: #fff; }
+  .recstate { margin-top: 10px; display: flex; align-items: center; gap: 10px; font-variant-numeric: tabular-nums; }
+  .recstate .live { width: 12px; height: 12px; border-radius: 50%; background: var(--bad); animation: blink 1s infinite; }
+  @keyframes blink { 50% { opacity: .25; } }
+  .reclist { list-style: none; margin: 0; padding: 0; }
+  .reclist li { padding: 10px 0; border-top: 1px solid var(--line); }
+  .reclist li:first-child { border-top: 0; padding-top: 2px; }
+  .reclist .nm { font-weight: 600; word-break: break-word; }
+  .reclist .meta { color: var(--dim); font-size: 13px; margin: 2px 0 8px; }
+  .reclist .acts { display: flex; gap: 8px; }
+  .reclist .acts .btn { flex: 1; }
+  /* Anti-distortion */
+  input[type=number] { width: 100%; min-height: 46px; border-radius: 10px; border: 1px solid var(--line); background: #252931;
+    color: var(--txt); font: inherit; padding: 0 12px; margin-top: 6px; user-select: text; -webkit-user-select: text; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .geo { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center; margin-top: 12px; }
+  .geo b { display: block; font-size: 18px; font-variant-numeric: tabular-nums; color: var(--acc); }
+  .geo span { color: var(--dim); font-size: 12px; }
+  .adst { font-variant-numeric: tabular-nums; margin-top: 10px; font-size: 14px; }
+  svg.terr { width: 100%; height: auto; margin-top: 10px; display: block; }
+  svg.terr text { fill: var(--dim); font-size: 11px; font-family: inherit; }
+  /* Language switch */
+  .lang { display: flex; gap: 4px; margin-left: auto; }
+  .lang button { background: #252931; color: var(--dim); border: 1px solid var(--line); border-radius: 8px;
+    font: inherit; font-size: 12px; font-weight: 600; padding: 4px 9px; cursor: pointer; }
+  .lang button.sel { background: var(--acc); color: #1a1408; border-color: var(--acc); }
+  header .lang + .info { margin-left: 10px; }
+</style>
+</head>
+<body>
+<header>
+  <span class="dot" id="dot"></span>
+  <h1>vinylclean</h1>
+  <div class="lang" id="lang"><button data-v="en">EN</button><button data-v="fr">FR</button></div>
+  <div class="info" id="info"></div>
+</header>
+
+<div class="alert sat" id="sat" data-i18n="alert.sat"></div>
+<div class="alert sat" id="satPhono" data-i18n="alert.satPhono"></div>
+<div class="alert err" id="err"></div>
+
+<div class="col">
+  <section class="card">
+    <h2 data-i18n="listen.title"></h2>
+    <div class="seg" id="mode">
+      <button data-v="0"><span data-i18n="listen.orig"></span><small data-i18n="listen.orig.s"></small></button>
+      <button data-v="1"><span data-i18n="listen.removed"></span><small data-i18n="listen.removed.s"></small></button>
+      <button data-v="2"><span data-i18n="listen.clean"></span><small data-i18n="listen.clean.s"></small></button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2 data-i18n="phono.title"></h2>
+    <div class="seg" id="riaa">
+      <button data-v="0"><span data-i18n="phono.ext"></span><small data-i18n="phono.ext.s"></small></button>
+      <button data-v="1"><span data-i18n="phono.int"></span><small data-i18n="phono.int.s"></small></button>
+    </div>
+    <div id="phonoBox">
+      <div class="row">
+        <label><span class="lbl" data-i18n="phono.gain"></span> <span id="vPhonoGain">–</span></label>
+        <input type="range" id="phonoGain" min="0" max="40" step="1">
+      </div>
+      <div class="row">
+        <label data-i18n="phono.rumble"></label>
+        <div class="seg" id="rumble" style="margin-top:6px">
+          <button data-v="0" data-i18n="no"></button><button data-v="1" data-i18n="yes"></button>
+        </div>
+      </div>
+    </div>
+    <p class="note" id="riaaNote"></p>
+  </section>
+
+  <section class="card">
+    <h2 data-i18n="sens.title"></h2>
+    <div class="row" style="margin-top:0">
+      <label><span class="lbl" data-i18n="sens.both"></span> <span id="tSens"></span></label>
+      <div class="seg sens" id="sens" style="margin-top:6px">
+        <button data-v="0">0</button><button data-v="1">1</button><button data-v="2">2</button>
+        <button data-v="3">3</button><button data-v="4">4</button><button data-v="5">5</button>
+      </div>
+    </div>
+    <div class="row">
+      <label data-i18n="sens.protect"></label>
+      <div class="seg" id="protect" style="margin-top:6px">
+        <button data-v="0" data-i18n="prot.none"></button><button data-v="1" data-i18n="prot.normal"></button><button data-v="2" data-i18n="prot.max"></button>
+      </div>
+    </div>
+    <p class="note" data-i18n="sens.note"></p>
+  </section>
+
+  <section class="card">
+    <h2 data-i18n="levels.title"></h2>
+    <div class="meters">
+      <span data-i18n="levels.inL"></span><div class="bar"><i id="mInL"></i></div><span class="db" id="dInL">–</span>
+      <span data-i18n="levels.inR"></span><div class="bar"><i id="mInR"></i></div><span class="db" id="dInR">–</span>
+      <span data-i18n="levels.outL"></span><div class="bar"><i id="mOutL"></i></div><span class="db" id="dOutL">–</span>
+      <span data-i18n="levels.outR"></span><div class="bar"><i id="mOutR"></i></div><span class="db" id="dOutR">–</span>
+    </div>
+    <div class="stats" style="margin-top:12px;grid-template-columns:repeat(3,1fr)">
+      <div><b id="sLufs">–</b><span data-i18n="levels.lufs"></span></div>
+      <div><b id="sLra">–</b><span data-i18n="levels.lra"></span></div>
+      <div><b id="sPlr">–</b><span data-i18n="levels.plr"></span></div>
+    </div>
+    <p class="note" id="loudNote"></p>
+  </section>
+
+  <section class="card" id="recCard">
+    <h2 data-i18n="rec.title"></h2>
+    <label for="recName" data-i18n="rec.name"></label>
+    <input type="text" id="recName" maxlength="150" autocomplete="off">
+    <div class="recrow" style="margin-top:10px">
+      <button class="btn rec" id="recStart"><span class="rd"></span><span data-i18n="rec.start"></span></button>
+      <button class="btn stop" id="recStop" disabled><span class="sq"></span><span data-i18n="rec.stop"></span></button>
+    </div>
+    <div class="recstate" id="recState" hidden><span class="live"></span><b id="recTime">0:00</b><span id="recFile" class="note" style="margin:0"></span></div>
+    <p class="note" id="recNote"></p>
+    <p class="note" id="recFree"></p>
+  </section>
+</div>
+
+<div class="col">
+  <section class="card" id="adCard">
+    <h2 data-i18n="ad.title"></h2>
+    <div class="seg" id="ad">
+      <button data-v="0" data-i18n="off"></button>
+      <button data-v="1"><span data-i18n="on"></span><small data-i18n="ad.on.s"></small></button>
+    </div>
+    <div id="adBox">
+      <p class="adst" id="adState">–</p>
+      <div class="row">
+        <label data-i18n="ad.pos"></label>
+        <div class="seg" id="autoPos" style="margin-top:6px">
+          <button data-v="1"><span data-i18n="ad.auto"></span><small data-i18n="ad.auto.s"></small></button>
+          <button data-v="0" data-i18n="ad.manual"></button>
+        </div>
+      </div>
+      <button class="btn small" id="adSide" style="width:100%;margin-top:8px" data-i18n="ad.side"></button>
+      <div class="row" id="posRow">
+        <label><span class="lbl" data-i18n="ad.radius"></span> <span id="vPosMm">–</span></label>
+        <input type="range" id="posMm" min="55" max="146" step="1">
+      </div>
+      <div class="row">
+        <label><span class="lbl" data-i18n="ad.int"></span> <span id="vAdInt">–</span></label>
+        <input type="range" id="adInt" min="0" max="1.5" step="0.05">
+      </div>
+      <details id="armBox" style="margin-top:12px">
+        <summary data-i18n="ad.arm"></summary>
+        <div class="row">
+          <label data-i18n="ad.armLen"></label>
+          <input type="number" id="armLen" min="150" max="400" step="0.1" inputmode="decimal">
+          <p data-i18n="ad.armLen.s"></p>
+        </div>
+        <div class="row">
+          <label data-i18n="ad.align"></label>
+          <select id="align">
+            <option value="2" data-i18n="ad.align.2"></option>
+            <option value="0" data-i18n="ad.align.0"></option>
+            <option value="1" data-i18n="ad.align.1"></option>
+            <option value="3" data-i18n="ad.align.3"></option>
+          </select>
+          <div class="grid2" id="nullsBox">
+            <input type="number" id="null1" min="50" max="140" step="0.01" inputmode="decimal">
+            <input type="number" id="null2" min="50" max="146" step="0.01" inputmode="decimal">
+          </div>
+        </div>
+        <div class="row">
+          <label data-i18n="ad.stylus"></label>
+          <select id="stylus">
+            <option value="0" data-i18n="ad.stylus.0"></option>
+            <option value="1" data-i18n="ad.stylus.1"></option>
+            <option value="2" data-i18n="ad.stylus.2"></option>
+            <option value="3" data-i18n="ad.stylus.3"></option>
+            <option value="4" data-i18n="ad.stylus.4"></option>
+            <option value="5" data-i18n="ad.stylus.5"></option>
+          </select>
+          <input type="number" id="stylusUm" min="1" max="25" step="0.1" inputmode="decimal">
+        </div>
+        <div class="row">
+          <label data-i18n="ad.disc"></label>
+          <select id="disc">
+            <option value="0" data-i18n="ad.disc.0"></option>
+            <option value="1" data-i18n="ad.disc.1"></option>
+            <option value="2" data-i18n="ad.disc.2"></option>
+          </select>
+        </div>
+        <div class="row">
+          <label><span class="lbl" data-i18n="ad.side.len"></span> <span id="vSideMin">–</span></label>
+          <input type="range" id="sideMin" min="3" max="30" step="1">
+        </div>
+        <div class="geo">
+          <div><b id="gOver">–</b><span data-i18n="ad.overhang"></span></div>
+          <div><b id="gOff">–</b><span data-i18n="ad.offset"></span></div>
+          <div><b id="gMount">–</b><span data-i18n="ad.mount"></span></div>
+        </div>
+        <svg class="terr" id="terr" viewBox="0 0 320 130"></svg>
+        <p class="note" data-i18n="ad.graph"></p>
+      </details>
+      <p class="note" data-i18n="ad.note"></p>
+    </div>
+  </section>
+
+  <section class="card">
+    <details id="advBox">
+      <summary data-i18n="adv.title"></summary>
+      <div class="row">
+        <label><span class="lbl" data-i18n="adv.declick"></span> <span id="tDeclick"></span></label>
+        <div class="seg sens" id="sensDeclick" style="margin-top:6px">
+          <button data-v="0">0</button><button data-v="1">1</button><button data-v="2">2</button>
+          <button data-v="3">3</button><button data-v="4">4</button><button data-v="5">5</button>
+        </div>
+      </div>
+      <div class="row">
+        <label><span class="lbl" data-i18n="adv.decrackle"></span> <span id="tDecrackle"></span></label>
+        <div class="seg sens" id="sensDecrackle" style="margin-top:6px">
+          <button data-v="0">0</button><button data-v="1">1</button><button data-v="2">2</button>
+          <button data-v="3">3</button><button data-v="4">4</button><button data-v="5">5</button>
+        </div>
+      </div>
+      <div class="row">
+        <label><span class="lbl" data-i18n="adv.declickInt"></span> <span id="vDeclick">–</span></label>
+        <input type="range" id="declick" min="0" max="10" step="0.5">
+      </div>
+      <div class="row">
+        <label><span class="lbl" data-i18n="adv.decrackleInt"></span> <span id="vDecrackle">–</span></label>
+        <input type="range" id="decrackle" min="0" max="10" step="0.5">
+      </div>
+      <div class="row">
+        <label><span class="lbl" data-i18n="adv.maxclick"></span> <span id="vMaxclick">–</span></label>
+        <input type="range" id="maxclick" min="0.5" max="5" step="0.5">
+      </div>
+      <div class="row">
+        <label data-i18n="adv.repair"></label>
+        <div class="seg" id="multiband" style="margin-top:6px">
+          <button data-v="0" data-i18n="adv.fullband"></button><button data-v="1" data-i18n="adv.multiband"></button>
+        </div>
+      </div>
+      <div class="row">
+        <label data-i18n="adv.stereo"></label>
+        <div class="seg" id="stereo" style="margin-top:6px">
+          <button data-v="0" data-i18n="adv.separate"></button><button data-v="1" data-i18n="adv.linked"></button>
+        </div>
+      </div>
+      <p class="note" data-i18n="adv.note"></p>
+    </details>
+  </section>
+
+  <section class="card">
+    <div class="stats">
+      <div><b id="sClicks">0</b><span data-i18n="st.clicks"></span></div>
+      <div><b id="sCrackles">0</b><span data-i18n="st.crackles"></span></div>
+      <div><b id="sLoad">–</b><span data-i18n="st.load"></span></div>
+      <div><b id="sXruns">0</b><span data-i18n="st.xruns"></span></div>
+    </div>
+  </section>
+
+  <section class="card" id="recsCard">
+    <h2 data-i18n="recs.title"></h2>
+    <ul class="reclist" id="recList"></ul>
+    <p class="note" id="recEmpty" data-i18n="recs.empty"></p>
+  </section>
+
+  <section class="card">
+    <details id="cardBox">
+      <summary data-i18n="card.title"></summary>
+      <div class="row"><label data-i18n="card.in"></label><select id="inDev"></select></div>
+      <div class="row"><label data-i18n="card.out"></label><select id="outDev"></select></div>
+      <div class="row"><label data-i18n="card.rate"></label><select id="rate"></select></div>
+      <p class="note" id="cardNote"></p>
+      <button class="btn" id="apply" data-i18n="card.apply"></button>
+    </details>
+  </section>
+</div>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+if (/[?&]kiosk=1/.test(location.search)) document.body.classList.add("kiosk");
+
+// ---- Languages (English / French). Add a language by adding a dictionary. ----
+const I18N = {
+  en: {
+    connecting: "connecting…", disconnected: "disconnected…", stopped: "audio stopped", changingCard: "changing card…",
+    yes: "Yes", no: "No", on: "On", off: "Off", custom: "custom",
+    "alert.sat": "⚠ The input is clipping: lower the input gain of the sound card.",
+    "alert.satPhono": "⚠ The phono gain is too high: lower “Phono gain” (built-in phono preamp).",
+    "err.outState": "The sound card output is not running (state {0}).",
+    "err.card": "sound card error", "err.restored": "previous configuration restored",
+    "listen.title": "Listening", "listen.orig": "Original", "listen.orig.s": "no processing",
+    "listen.removed": "Removed", "listen.removed.s": "what is taken out", "listen.clean": "Cleaned", "listen.clean.s": "repaired sound",
+    "phono.title": "Phono preamp", "phono.ext": "External", "phono.ext.s": "I have a phono preamp",
+    "phono.int": "Built-in", "phono.int.s": "turntable direct (RIAA)", "phono.gain": "Phono gain", "phono.rumble": "Rumble filter (very low noises)",
+    "phono.note.on": "Digital RIAA correction (official curve within ±0.01 dB). Use the line input of the sound card (instrument mode off). First set the card gain so that it never clips, then the phono gain so that the output reaches −12 to −6 dB without clipping.",
+    "phono.note.off": "External: your phono preamp already applies the RIAA correction. Choose “Built-in” if the turntable is connected directly to the sound card.",
+    "sens.title": "Sensitivity", "sens.both": "Clicks and crackles", "sens.protect": "Music protection",
+    "prot.none": "None", "prot.normal": "Normal", "prot.max": "Maximum",
+    "sens.note": "0 = off. 1 to 5: more and more sensitive. Separate declick and decrackle settings: “Advanced settings”. To remove more large clicks: protection “None”.",
+    "levels.title": "Levels", "levels.inL": "Input L", "levels.inR": "Input R", "levels.outL": "Output L", "levels.outR": "Output R",
+    "levels.lufs": "loudness (3 s)", "levels.lra": "dynamic range", "levels.plr": "peak / average",
+    "levels.note": "Dynamic range (LRA, EBU R128) and peak-to-loudness ratio, over the last minute.",
+    "levels.partial": "Measured over {0} s (one minute for the full value).",
+    "rec.title": "Recording", "rec.name": "File name", "rec.placeholder": "e.g. Artist - Album - Side A",
+    "rec.start": "Record", "rec.stop": "Stop",
+    "rec.note": "Turntable sound without declick (with the RIAA correction if the built-in preamp is selected), as 24-bit FLAC. You can listen and adjust the cleaning while recording.",
+    "rec.lost": "Warning: the disk could not keep up, a few fractions of a second are missing.",
+    "rec.free": "Free space: {0} (≈ {1} of recording)",
+    "rec.m.start_fail": "Cannot record: {0}", "rec.m.card_not_ready": "the sound card is not ready", "rec.m.no_space": "not enough space left (less than 300 MB)",
+    "rec.m.saved": "Saved: {0} ({1})", "rec.m.stop_error": "Recording stopped: {0} ({1})", "rec.m.stop_disk": "Disk almost full: recording stopped ({1})",
+    "rec.m.stop_card": "Sound card stopped: recording finished ({1})", "rec.m.stop_reconfig": "Card or sample rate changed: recording finished ({1})",
+    "rec.m.lost": " — warning: a few blocks lost (disk too slow)",
+    "rec.m.del_current": "The recording in progress cannot be deleted.", "rec.m.del_fail": "Cannot delete: {0}", "rec.m.del_ok": "Deleted: {0}",
+    "recs.title": "My recordings", "recs.empty": "No recordings yet.", "recs.live": "● recording · ",
+    "recs.download": "⬇ Download", "recs.delete": "🗑 Delete", "recs.confirm": "Confirm deletion?",
+    "ad.title": "Anti-distortion (end of side)", "ad.on.s": "corrects stylus and tonearm",
+    "ad.pos": "Stylus position", "ad.auto": "Automatic", "ad.auto.s": "from the stylus drop", "ad.manual": "Manual",
+    "ad.side": "⏵ I am dropping the stylus at the start of the side",
+    "ad.radius": "Radius (distance from the center)", "ad.int": "Correction intensity",
+    "ad.arm": "My turntable and cartridge", "ad.armLen": "Effective tonearm length (mm)",
+    "ad.armLen.s": "Distance from pivot to stylus, given by the manufacturer (often 222 mm for a 9-inch arm, about 230 mm for many direct-drive DJ turntables).",
+    "ad.align": "Alignment set on the turntable",
+    "ad.align.2": "Stevenson (null points 60.33 / 117.42 mm)", "ad.align.0": "Baerwald (66.00 / 120.90 mm)",
+    "ad.align.1": "Löfgren B (70.29 / 116.60 mm)", "ad.align.3": "Custom (my null points)",
+    "ad.stylus": "Stylus", "ad.stylus.0": "Conical / spherical (15.2 µm)", "ad.stylus.1": "Elliptical 0.3 × 0.7 mil (7.6 µm)",
+    "ad.stylus.2": "Fine elliptical 0.2 × 0.7 mil (5.1 µm)", "ad.stylus.3": "Shibata (≈ 6 µm)",
+    "ad.stylus.4": "Micro-line (≈ 2.8 µm)", "ad.stylus.5": "Custom (radius in µm)",
+    "ad.disc": "Record", "ad.disc.0": "33 rpm (12\")", "ad.disc.1": "45 rpm (7\")", "ad.disc.2": "Maxi 45 rpm (12\")",
+    "ad.side.len": "Length of a side", "ad.overhang": "overhang", "ad.offset": "offset angle", "ad.mount": "pivot → spindle",
+    "ad.graph": "Tracking error of the arm versus the position on the record (exact calculation). The two zeros are the null points of your protractor; the orange dot shows where the stylus plays.",
+    "ad.note": "Playback distortion grows towards the center of the record (the groove runs 2.5 times slower than at the edge). The stylus shape and the arm geometry are exact; the real groove level (cm/s) is estimated from the music, hence the intensity setting. In simulated physical tests, the correction removes 11 to 38 dB of these distortions.",
+    "ad.state": "Stylus at {0} mm · tracking error {1}° · groove {2} cm/s", "ad.state.side": " · side: {0}",
+    "ad.state.noDrop": " · stylus drop not seen yet (assuming start of side)", "ad.state.level": " · estimating the level (20 s of music)…",
+    "ad.null1": "inner null point (mm)", "ad.null2": "outer null point (mm)", "ad.um": "stylus radius along the groove (µm)",
+    "adv.title": "Advanced settings", "adv.declick": "Declick (large clicks)", "adv.decrackle": "Decrackle (small crackles)",
+    "adv.declickInt": "Declick intensity", "adv.decrackleInt": "Decrackle intensity", "adv.maxclick": "Maximum click length",
+    "adv.repair": "Repair", "adv.fullband": "Full band", "adv.multiband": "Multiband",
+    "adv.stereo": "Stereo", "adv.separate": "Separate channels", "adv.linked": "Linked channels",
+    "adv.note": "Sensitivities 0 to 5 choose these intensities; a value between two steps shows as “custom”. Multiband: only the frequency bands where the click dominates are repaired, so the music is touched less, especially with protection “None”. Full band: removes a little more of each click. Linked channels: a click present on one side only is easier to recognize, and long clicks are rebuilt with help from the other channel (turns itself off on a mono record).",
+    "st.clicks": "clicks", "st.crackles": "crackles", "st.load": "load", "st.xruns": "dropouts",
+    "card.title": "Sound card and quality", "card.in": "Input", "card.out": "Output", "card.rate": "Sample rate",
+    "card.apply": "Apply (≈ 1 s of silence)", "card.current": "{0} (current)",
+    "card.two": "Two different cards: their clocks drift slightly. Small dropouts are possible every few minutes (no drift correction yet).",
+    "card.best": "Best format of the card: {0}. Always at maximum quality, without conversion.",
+    "card.heavy": "  ⚠ too heavy for this Pi (≈ {0} %)", "card.est": "  (≈ {0} % of one core)"
+  },
+  fr: {
+    connecting: "connexion…", disconnected: "déconnecté…", stopped: "audio arrêté", changingCard: "changement de carte…",
+    yes: "Oui", no: "Non", on: "Oui", off: "Non", custom: "perso",
+    "alert.sat": "⚠ L'entrée sature : baisse le gain d'entrée de la carte son.",
+    "alert.satPhono": "⚠ Le gain phono est trop fort : baisse « Gain phono » (préampli phono intégré).",
+    "err.outState": "La sortie de la carte son ne tourne pas (état {0}).",
+    "err.card": "erreur de la carte son", "err.restored": "configuration précédente rétablie",
+    "listen.title": "Écoute", "listen.orig": "Original", "listen.orig.s": "sans traitement",
+    "listen.removed": "Enlevé", "listen.removed.s": "ce qui est retiré", "listen.clean": "Nettoyé", "listen.clean.s": "son réparé",
+    "phono.title": "Préampli phono", "phono.ext": "Externe", "phono.ext.s": "j'ai un préampli phono",
+    "phono.int": "Intégré", "phono.int.s": "platine en direct (RIAA)", "phono.gain": "Gain phono", "phono.rumble": "Anti-rumble (grondements très graves)",
+    "phono.note.on": "Correction RIAA numérique (courbe officielle à ±0,01 dB). Utilise l'entrée ligne de la carte son (mode instrument éteint). Règle d'abord le gain de la carte pour qu'elle ne sature jamais, puis le gain phono pour que la sortie monte vers −12 à −6 dB sans saturer.",
+    "phono.note.off": "Externe : ton préampli phono fait déjà la correction RIAA. Choisis « Intégré » si la platine est branchée directement dans la carte son.",
+    "sens.title": "Sensibilité", "sens.both": "Clics et craquements", "sens.protect": "Protection de la musique",
+    "prot.none": "Aucune", "prot.normal": "Normale", "prot.max": "Maximale",
+    "sens.note": "0 = désactivé. 1 à 5 : de plus en plus sensible. Réglage séparé du déclick et du dé-crackle : « Paramètres avancés ». Pour enlever plus de gros clics : protection « Aucune ».",
+    "levels.title": "Niveaux", "levels.inL": "Entrée G", "levels.inR": "Entrée D", "levels.outL": "Sortie G", "levels.outR": "Sortie D",
+    "levels.lufs": "sonie (3 s)", "levels.lra": "plage dynamique", "levels.plr": "crête / moyenne",
+    "levels.note": "Plage dynamique (LRA, norme EBU R128) et écart crête / sonie moyenne, sur la dernière minute.",
+    "levels.partial": "Mesure sur {0} s (une minute pour la valeur complète).",
+    "rec.title": "Enregistrement", "rec.name": "Nom du fichier", "rec.placeholder": "ex. Artiste - Album - Face A",
+    "rec.start": "Enregistrer", "rec.stop": "Arrêter",
+    "rec.note": "Son de la platine sans déclick (avec la correction RIAA si le préampli intégré est choisi), en FLAC 24 bits. Tu peux écouter et régler le nettoyage pendant l'enregistrement.",
+    "rec.lost": "Attention : le disque n'a pas suivi, quelques fractions de seconde manquent.",
+    "rec.free": "Place libre : {0} (≈ {1} d'enregistrement)",
+    "rec.m.start_fail": "Impossible d'enregistrer : {0}", "rec.m.card_not_ready": "la carte son n'est pas prête", "rec.m.no_space": "plus assez de place (moins de 300 Mo)",
+    "rec.m.saved": "Enregistré : {0} ({1})", "rec.m.stop_error": "Enregistrement arrêté : {0} ({1})", "rec.m.stop_disk": "Disque presque plein : enregistrement arrêté ({1})",
+    "rec.m.stop_card": "Carte son arrêtée : enregistrement terminé ({1})", "rec.m.stop_reconfig": "Changement de carte ou de fréquence : enregistrement terminé ({1})",
+    "rec.m.lost": " — attention : quelques blocs perdus (disque trop lent)",
+    "rec.m.del_current": "On ne peut pas supprimer l'enregistrement en cours.", "rec.m.del_fail": "Suppression impossible : {0}", "rec.m.del_ok": "Supprimé : {0}",
+    "recs.title": "Mes enregistrements", "recs.empty": "Aucun enregistrement pour l'instant.", "recs.live": "● en cours · ",
+    "recs.download": "⬇ Télécharger", "recs.delete": "🗑 Supprimer", "recs.confirm": "Confirmer la suppression ?",
+    "ad.title": "Anti-distorsion (fin de face)", "ad.on.s": "corrige la pointe et le bras",
+    "ad.pos": "Position de la pointe", "ad.auto": "Automatique", "ad.auto.s": "depuis la pose du diamant", "ad.manual": "Manuelle",
+    "ad.side": "⏵ Je pose le diamant au début de la face",
+    "ad.radius": "Rayon (distance au centre du disque)", "ad.int": "Intensité de la correction",
+    "ad.arm": "Ma platine et ma cellule", "ad.armLen": "Longueur effective du bras (mm)",
+    "ad.armLen.s": "Distance pivot → pointe, donnée par le fabricant (souvent 222 mm pour un bras de 9 pouces, environ 230 mm pour beaucoup de platines DJ à entraînement direct).",
+    "ad.align": "Alignement réglé sur la platine",
+    "ad.align.2": "Stevenson (points nuls 60,33 / 117,42 mm)", "ad.align.0": "Baerwald (66,00 / 120,90 mm)",
+    "ad.align.1": "Löfgren B (70,29 / 116,60 mm)", "ad.align.3": "Sur mesure (mes points nuls)",
+    "ad.stylus": "Pointe (diamant)", "ad.stylus.0": "Conique / sphérique (15,2 µm)", "ad.stylus.1": "Elliptique 0,3 × 0,7 mil (7,6 µm)",
+    "ad.stylus.2": "Elliptique fine 0,2 × 0,7 mil (5,1 µm)", "ad.stylus.3": "Shibata (≈ 6 µm)",
+    "ad.stylus.4": "Micro-ligne (≈ 2,8 µm)", "ad.stylus.5": "Sur mesure (rayon en µm)",
+    "ad.disc": "Disque", "ad.disc.0": "33 tours (30 cm)", "ad.disc.1": "45 tours (17 cm)", "ad.disc.2": "Maxi 45 tours (30 cm)",
+    "ad.side.len": "Durée d'une face", "ad.overhang": "dépassement", "ad.offset": "angle de décalage", "ad.mount": "pivot → axe",
+    "ad.graph": "Erreur d'angle du bras selon la position sur le disque (calcul exact). Les deux zéros sont les points nuls de ton rapporteur ; le point orange montre où joue la pointe.",
+    "ad.note": "La distorsion de lecture grandit vers le centre du disque (le sillon défile 2,5 fois moins vite qu'au bord). La forme de la pointe et la géométrie du bras sont exactes ; le niveau réel du sillon (en cm/s) est estimé sur la musique, d'où le réglage d'intensité. Sur des tests physiques simulés, la correction retire 11 à 38 dB de ces distorsions.",
+    "ad.state": "Pointe à {0} mm · erreur d'angle {1}° · sillon {2} cm/s", "ad.state.side": " · face : {0}",
+    "ad.state.noDrop": " · pose du diamant pas encore vue (hypothèse : début de face)", "ad.state.level": " · niveau en cours d'estimation (20 s de musique)…",
+    "ad.null1": "point nul intérieur (mm)", "ad.null2": "point nul extérieur (mm)", "ad.um": "rayon de la pointe dans le sens du sillon (µm)",
+    "adv.title": "Paramètres avancés", "adv.declick": "Déclick (gros clics)", "adv.decrackle": "Dé-crackle (petits craquements)",
+    "adv.declickInt": "Intensité du déclick", "adv.decrackleInt": "Intensité du dé-crackle", "adv.maxclick": "Longueur max d'un clic",
+    "adv.repair": "Réparation", "adv.fullband": "Pleine bande", "adv.multiband": "Multibande",
+    "adv.stereo": "Stéréo", "adv.separate": "Canaux séparés", "adv.linked": "Canaux liés",
+    "adv.note": "Les sensibilités 0 à 5 choisissent ces intensités ; une valeur entre deux crans s'affiche « perso ». Multibande : on ne répare que les bandes de fréquences où le clic domine, la musique est moins touchée, surtout en protection « Aucune ». Pleine bande : enlève un peu plus de chaque clic. Canaux liés : un clic présent d'un seul côté est plus facile à reconnaître, et les longs clics sont reconstruits avec l'aide de l'autre canal (coupé tout seul sur un disque mono).",
+    "st.clicks": "clics", "st.crackles": "craquements", "st.load": "charge", "st.xruns": "coupures",
+    "card.title": "Carte son et qualité", "card.in": "Entrée", "card.out": "Sortie", "card.rate": "Fréquence d'échantillonnage",
+    "card.apply": "Appliquer (≈ 1 s de silence)", "card.current": "{0} (actuelle)",
+    "card.two": "Deux cartes différentes : leurs horloges dérivent un peu. Petites coupures possibles toutes les quelques minutes (correction de dérive pas encore disponible).",
+    "card.best": "Meilleur format de la carte : {0}. Toujours en qualité maximale, sans conversion.",
+    "card.heavy": "  ⚠ trop lourd pour ce Pi (≈ {0} %)", "card.est": "  (≈ {0} % d'un cœur)"
+  }
+};
+function pickLang() {
+  try { const l = localStorage.getItem("vc.lang"); if (l && I18N[l]) return l; } catch (e) {}
+  return /^fr\b/i.test(navigator.language || "") ? "fr" : "en";
+}
+let LANG = pickLang();
+function t(key, ...a) {
+  const s = (I18N[LANG] && I18N[LANG][key]) ?? I18N.en[key] ?? key;
+  return s.replace(/\{(\d)\}/g, (m, i) => a[+i] ?? "");
+}
+// Numbers with the decimal separator of the language.
+const fr = (v, n) => { const s = (+v).toFixed(n); return LANG === "fr" ? s.replace(".", ",") : s; };
+function applyLang() {
+  document.documentElement.lang = LANG;
+  for (const el of document.querySelectorAll("[data-i18n]")) el.textContent = t(el.dataset.i18n);
+  $("recName").placeholder = t("rec.placeholder");
+  $("null1").title = t("ad.null1"); $("null2").title = t("ad.null2"); $("stylusUm").title = t("ad.um");
+  for (const b of $("lang").querySelectorAll("button")) b.classList.toggle("sel", b.dataset.v === LANG);
+  if (!ws || ws.readyState !== 1) $("info").textContent = t("connecting");
+  render(); status(); renderRecs(); fillCards();
+}
+$("lang").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  LANG = b.dataset.v;
+  try { localStorage.setItem("vc.lang", LANG); } catch (err) {}
+  applyLang();
+});
+
+let ws = null, S = {}, St = {}, cards = [], dragging = null, sendTimer = null, pend = {}, recs = {items: [], free: 0};
+
+function connect() {
+  ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
+  ws.onopen = () => { $("dot").classList.add("on"); };
+  ws.onclose = () => { $("dot").classList.remove("on"); $("info").textContent = t("disconnected"); setTimeout(connect, 1500); };
+  ws.onmessage = ev => {
+    let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+    if (m.type === "settings") { S = m; render(); }
+    else if (m.type === "status") { St = m; status(); }
+    else if (m.type === "cards") { cards = m.cards; fillCards(); }
+    else if (m.type === "recs") { recs = m; renderRecs(); }
+  };
+}
+function send(obj) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj)); }
+// Sliders send at most 10 messages per second.
+function sendSoon(obj) {
+  Object.assign(pend, obj);
+  if (sendTimer) return;
+  sendTimer = setTimeout(() => { send(Object.assign({cmd: "set"}, pend)); pend = {}; sendTimer = null; }, 100);
+}
+
+function seg(id, val) {
+  for (const b of $(id).querySelectorAll("button")) b.classList.toggle("sel", b.dataset.v == String(val));
+}
+function render() {
+  if (S.mode === undefined) return;
+  seg("riaa", S.riaa); seg("rumble", S.rumble);
+  $("phonoBox").hidden = !S.riaa;
+  $("riaaNote").textContent = t(S.riaa ? "phono.note.on" : "phono.note.off");
+  if (dragging !== "phonoGain") $("phonoGain").value = S.phonoGain;
+  $("vPhonoGain").textContent = "+" + Math.round(S.phonoGain || 0) + " dB";
+  seg("mode", S.mode); seg("protect", S.protect); seg("multiband", S.multiband); seg("stereo", S.stereo);
+  seg("sens", S.sens); $("tSens").textContent = S.sens < 0 ? t("custom") : "";
+  seg("sensDeclick", S.sensDeclick); seg("sensDecrackle", S.sensDecrackle);
+  $("tDeclick").textContent = S.sensDeclick < 0 ? t("custom") : "";
+  $("tDecrackle").textContent = S.sensDecrackle < 0 ? t("custom") : "";
+  const num = v => fr(v, 1).replace(/[.,]0$/, "");
+  for (const [id, fmt] of [["declick", num], ["decrackle", num], ["maxclick", v => fr(v, 1) + " ms"]]) {
+    if (dragging !== id) $(id).value = S[id];
+    $("v" + id[0].toUpperCase() + id.slice(1)).textContent = fmt(S[id]);
+  }
+  renderAd();
+  fillCards();
+}
+// ---- Anti-distortion: arm geometry (same formulas as the program) ----
+const NULLS = {0: [66.00, 120.90], 1: [70.29, 116.60], 2: [60.325, 117.42]};
+function armGeo() {
+  const L = +S.armLen || 222;
+  const [r1, r2] = S.align == 3 ? [+S.null1, +S.null2] : NULLS[S.align] || NULLS[2];
+  const sb = (r1 + r2) / (2 * L), beta = Math.asin(Math.min(1, sb));
+  const d = Math.sqrt(Math.max(0, L * L - r1 * r2));
+  const err = r => (Math.asin(Math.max(-1, Math.min(1, (L * L + r * r - d * d) / (2 * L * r)))) - beta) * 180 / Math.PI;
+  return {L, r1, r2, off: beta * 180 / Math.PI, over: L - d, mount: d, err};
+}
+function drawTerr(g) {
+  const W = 320, H = 130, x0 = 34, x1 = W - 8, y0 = 8, y1 = H - 22, rA = 55, rB = 150;
+  let emax = 0; for (let r = 60; r <= 146.1; r += 1) emax = Math.max(emax, Math.abs(g.err(r)));
+  emax = Math.max(1, Math.ceil(emax));
+  const X = r => x0 + (r - rA) / (rB - rA) * (x1 - x0), Y = e => y0 + (emax - e) / (2 * emax) * (y1 - y0);
+  let p = "";
+  for (let r = 60.325; r <= 146.05; r += 0.5) p += (p ? "L" : "M") + X(r).toFixed(1) + " " + Y(g.err(r)).toFixed(1);
+  let h = '<line x1="' + x0 + '" x2="' + x1 + '" y1="' + Y(0) + '" y2="' + Y(0) + '" stroke="#2c3038"/>';
+  for (const e of [emax, -emax]) h += '<text x="2" y="' + (Y(e) + 4) + '">' + (e > 0 ? "+" : "") + e + '°</text>';
+  for (const r of [60, 80, 100, 120]) h += '<text x="' + (X(r) - 8) + '" y="' + (H - 6) + '">' + r + '</text>';
+  h += '<text x="' + (X(140) - 14) + '" y="' + (H - 6) + '">140 mm</text>';
+  h += '<path d="' + p + '" fill="none" stroke="#e8e6e1" stroke-width="1.6"/>';
+  for (const r of [g.r1, g.r2]) h += '<circle cx="' + X(r) + '" cy="' + Y(0) + '" r="3.5" fill="#6cbf84"/>';
+  if (S.ad && St.adR > 0) h += '<circle cx="' + X(St.adR) + '" cy="' + Y(g.err(St.adR)) + '" r="5" fill="#e0a85a"/>';
+  $("terr").innerHTML = h;
+}
+function renderAd() {
+  if (S.ad === undefined) return;
+  seg("ad", S.ad); seg("autoPos", S.autoPos);
+  $("adBox").hidden = !S.ad;
+  $("posRow").hidden = !!S.autoPos; $("adSide").hidden = !S.autoPos;
+  for (const id of ["armLen", "null1", "null2", "stylusUm"])
+    if (document.activeElement !== $(id)) $(id).value = S[id];
+  for (const id of ["align", "stylus", "disc"]) if (document.activeElement !== $(id)) $(id).value = S[id];
+  $("nullsBox").hidden = S.align != 3; $("stylusUm").hidden = S.stylus != 5;
+  for (const id of ["posMm", "adInt", "sideMin"]) if (dragging !== id) $(id).value = S[id];
+  $("vPosMm").textContent = Math.round(S.posMm) + " mm";
+  $("vAdInt").textContent = Math.round(S.adInt * 100) + " %";
+  $("vSideMin").textContent = Math.round(S.sideMin) + " min";
+  const g = armGeo();
+  $("gOver").textContent = fr(g.over, 2) + " mm"; $("gOff").textContent = fr(g.off, 2) + "°"; $("gMount").textContent = fr(g.mount, 1) + " mm";
+  drawTerr(g);
+}
+function adStatus() {
+  if (!S.ad) return;
+  let s = "–";
+  if (St.running && St.adR > 0) {
+    s = t("ad.state", Math.round(St.adR), (St.adErr >= 0 ? "+" : "") + fr(St.adErr, 2), Math.round(St.adV));
+    if (S.autoPos) s += St.adSide >= 0 ? t("ad.state.side", dur(St.adSide)) : t("ad.state.noDrop");
+    if (!St.adReady) s += t("ad.state.level");
+  }
+  $("adState").textContent = s;
+  if (St.adR > 0) drawTerr(armGeo());
+}
+function meter(bar, txt, db) {
+  const pct = Math.max(0, Math.min(100, (db + 60) / 60 * 100));
+  const el = $(bar); el.style.width = pct + "%";
+  el.className = db > -1 ? "clip" : db > -12 ? "hot" : "";
+  $(txt).textContent = db <= -119 ? "–∞" : db.toFixed(0) + " dB";
+}
+// ---- Recording ----
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+const dur = s => { if (!(s >= 0)) return "?"; s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = s % 60;
+  return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(x).padStart(2, "0"); };
+const size = b => b >= 1e9 ? fr(b / 1e9, 1) + (LANG === "fr" ? " Go" : " GB") : Math.round(b / 1e6) + (LANG === "fr" ? " Mo" : " MB");
+// Messages from vc-live arrive as "code|detail|duration|lost" and are shown in the page's language.
+function recMessage(raw) {
+  if (!raw) return "";
+  const [code, detail = "", d = "", lost = "0"] = raw.split("|");
+  if (code === "start_fail") return t("rec.m.start_fail", I18N.en["rec.m." + detail] ? t("rec.m." + detail) : detail);
+  if (!I18N.en["rec.m." + code]) return raw;
+  return t("rec.m." + code, detail, d) + (lost === "1" ? t("rec.m.lost") : "");
+}
+function recStatus() {
+  const on = !!St.recOn;
+  $("recCard").hidden = St.recAvail === false;
+  $("recStart").disabled = on || !St.running;
+  $("recStop").disabled = !on;
+  $("recName").disabled = on;
+  $("recState").hidden = !on;
+  if (on) { $("recTime").textContent = dur(St.recSec); $("recFile").textContent = St.recName || ""; }
+  let n = recMessage(St.recMsg);
+  if (on && St.recLost > 0) n = t("rec.lost");
+  $("recNote").textContent = n || t("rec.note");
+  $("recNote").className = "note" + (n ? " warn" : "");
+}
+function renderRecs() {
+  const ul = $("recList"); ul.innerHTML = "";
+  for (const it of recs.items || []) {
+    const li = document.createElement("li");
+    const url = "/download/" + encodeURIComponent(it.name);
+    li.innerHTML = '<div class="nm">' + esc(it.name.replace(/\.flac$/i, "")) + '</div>' +
+      '<div class="meta">' + (it.rec ? t("recs.live") : "") + dur(it.sec) + " · " + size(it.bytes) + " · " + esc(it.date) + '</div>' +
+      '<div class="acts">' + (it.rec ? "" : '<a class="btn small" href="' + url + '" download>' + esc(t("recs.download")) + '</a>' +
+      '<button class="btn small danger">' + esc(t("recs.delete")) + '</button>') + '</div>';
+    const del = li.querySelector("button.danger");
+    if (del) del.addEventListener("click", () => {
+      // Two taps: the first arms, the second (within 4 s) deletes.
+      if (!del.classList.contains("confirm")) {
+        del.classList.add("confirm"); del.textContent = t("recs.confirm");
+        setTimeout(() => { del.classList.remove("confirm"); del.textContent = t("recs.delete"); }, 4000);
+      } else send({cmd: "rec_delete", file: it.name});
+    });
+    ul.appendChild(li);
+  }
+  $("recEmpty").hidden = (recs.items || []).length > 0;
+  // Free space ≈ remaining time (24-bit stereo FLAC ≈ 60 % of raw).
+  const rate = St.rate || 48000, perSec = rate * 2 * 3 * 0.6;
+  const left = recs.free / perSec, leftTxt = left >= 3600 ? Math.floor(left / 3600) + " h" : Math.floor(left / 60) + " min";
+  $("recFree").textContent = recs.free ? t("rec.free", size(recs.free), leftTxt) : "";
+  $("recFree").className = "note" + (recs.free && recs.free < 1e9 ? " warn" : "");
+}
+$("recStart").addEventListener("click", () => { send({cmd: "rec_start", name: $("recName").value}); });
+$("recStop").addEventListener("click", () => { send({cmd: "rec_stop"}); });
+$("recName").addEventListener("keydown", e => { if (e.key === "Enter" && !$("recStart").disabled) $("recStart").click(); });
+
+function errText(e) {
+  return e.replace("previous configuration restored", t("err.restored")).replace(/^sound card error$/, t("err.card"));
+}
+function status() {
+  if (St.running === undefined) return;
+  recStatus(); adStatus();
+  meter("mInL", "dInL", St.inL); meter("mInR", "dInR", St.inR);
+  meter("mOutL", "dOutL", St.outL); meter("mOutR", "dOutR", St.outR);
+  $("sat").classList.toggle("show", !!St.sat);
+  $("satPhono").classList.toggle("show", !!St.satPhono);
+  let e = errText(St.error || "");
+  if (!e && St.running && St.outState && St.outState !== "RUNNING") e = t("err.outState", St.outState);
+  $("err").textContent = e ? "⚠ " + e : "";
+  $("err").classList.toggle("show", !!e);
+  $("sClicks").textContent = St.clicks; $("sCrackles").textContent = St.crackles;
+  $("sLoad").textContent = St.running ? Math.round(St.load) + " %" : "–";
+  $("sXruns").textContent = St.xruns;
+  const ok = St.running && St.loudSec >= 3 && St.lufsS > -70;
+  $("sLufs").textContent = ok ? Math.round(St.lufsS) + " LUFS" : "–";
+  $("sLra").textContent = ok && St.loudSec >= 10 ? fr(St.lra, 1) + " dB" : "–";
+  $("sPlr").textContent = ok && St.loudSec >= 10 ? fr(St.plr, 1) + " dB" : "–";
+  $("loudNote").textContent = St.loudSec < 60 ? t("levels.partial", Math.round(St.loudSec || 0)) : t("levels.note");
+  $("info").textContent = St.running ? fr(St.rate / 1000, St.rate % 1000 ? 1 : 0) + " kHz · " + St.format + " · " + St.latency + " ms"
+                                     : t("stopped");
+}
+
+function fillCards() {
+  if (!cards.length || !S.in) return;
+  if (document.activeElement && ["inDev", "outDev", "rate"].includes(document.activeElement.id)) return;
+  const fill = (sel, dir, cur) => {
+    sel.innerHTML = "";
+    let found = false;
+    for (const c of cards) if (c[dir].length) {
+      const o = new Option(c.name + " (" + c.dev + ")", c.dev); if (c.dev === cur) { o.selected = true; found = true; } sel.add(o);
+    }
+    if (!found) { const o = new Option(t("card.current", cur), cur); o.selected = true; sel.add(o); }
+  };
+  fill($("inDev"), "in", S.in); fill($("outDev"), "out", S.out);
+  updateRates();
+}
+function updateRates() {
+  const ci = cards.find(c => c.dev === $("inDev").value), co = cards.find(c => c.dev === $("outDev").value);
+  let rates = [44100, 48000, 88200, 96000];
+  if (ci && co) rates = ci.in.filter(r => co.out.includes(r));
+  const sel = $("rate"), cur = +(sel.value || S.rate);
+  sel.innerHTML = "";
+  for (const r of rates) {
+    // Estimated load from the measured load (proportional to the sample rate).
+    let est = "";
+    if (St.running && St.rate) {
+      const f = (r / St.rate) * ((r > 60000 ? 1.33 : 1) / (St.rate > 60000 ? 1.33 : 1));
+      const e = Math.round(St.load * f);
+      est = e > 60 ? t("card.heavy", e) : t("card.est", Math.max(1, e));
+    }
+    const o = new Option(fr(r / 1000, r % 1000 ? 1 : 0) + " kHz" + est, r);
+    if (r === cur || (!sel.value && r === S.rate)) o.selected = true;
+    sel.add(o);
+  }
+  const two = $("inDev").value !== $("outDev").value;
+  $("cardNote").textContent = two ? t("card.two") : (ci ? t("card.best", ci.format) : "");
+  $("cardNote").className = "note" + (two ? " warn" : "");
+}
+
+for (const id of ["mode", "protect", "sens", "sensDeclick", "sensDecrackle", "multiband", "stereo", "riaa", "rumble", "ad", "autoPos"]) {
+  $(id).addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    const v = +b.dataset.v;
+    S[id] = v; render(); send({cmd: "set", [id]: v});
+  });
+}
+for (const id of ["armLen", "null1", "null2", "stylusUm", "align", "stylus", "disc"]) {
+  $(id).addEventListener("change", () => { const v = +$(id).value; if (!isFinite(v)) return; S[id] = v; render(); send({cmd: "set", [id]: v}); });
+}
+$("adSide").addEventListener("click", () => send({cmd: "ad_side"}));
+for (const id of ["declick", "decrackle", "maxclick", "phonoGain", "posMm", "adInt", "sideMin"]) {
+  const el = $(id);
+  el.addEventListener("pointerdown", () => dragging = id);
+  el.addEventListener("input", () => { S[id] = +el.value; render(); sendSoon({[id]: +el.value}); });
+  el.addEventListener("change", () => { dragging = null; send({cmd: "set", [id]: +el.value}); });
+}
+$("inDev").addEventListener("change", updateRates);
+$("outDev").addEventListener("change", updateRates);
+$("cardBox").addEventListener("toggle", () => { if ($("cardBox").open) send({cmd: "cards"}); });
+$("apply").addEventListener("click", () => {
+  send({cmd: "set", in: $("inDev").value, out: $("outDev").value, rate: +$("rate").value});
+  $("info").textContent = t("changingCard");
+});
+applyLang();
+connect();
+</script>
+</body>
+</html>

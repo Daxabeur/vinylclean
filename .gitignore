@@ -1,0 +1,23 @@
+# Build folders
+build/
+build-*/
+/cmake-build-*/
+
+# Audio and recordings: never published (copyright and privacy)
+*.wav
+*.flac
+*.mp3
+*.aiff
+*.aif
+*.ogg
+*.m4a
+recordings/
+enregistrements/
+
+# Local settings and editor files
+settings.json
+*.tmp
+*.swp
+.vscode/
+.idea/
+.DS_Store
