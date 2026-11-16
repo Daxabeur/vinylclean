@@ -22,6 +22,8 @@
 #  include <sys/syscall.h>
 #  include <sys/wait.h>
 #  include <unistd.h>
+#  include <cstring>
+extern char** environ;
 #endif
 
 namespace vcd {
@@ -166,17 +168,22 @@ inline bool openWindow(const std::string& url, const std::string& profileDir, bo
         return "";
     };
     auto spawn = [](const std::vector<std::string>& argv) -> bool {
+        // Everything is prepared BEFORE fork(): the child of a multithreaded
+        // program may only call async-signal-safe functions (setsid, fork, execve, _exit).
+        std::vector<char*> a;
+        for (auto& s : argv) a.push_back(const_cast<char*>(s.c_str()));
+        a.push_back(nullptr);
+        // The AppImage runtime sets these for its own files: the browser must not inherit them.
+        std::vector<char*> env;
+        for (char** e = environ; e && *e; ++e)
+            if (std::strncmp(*e, "LD_LIBRARY_PATH=", 16) && std::strncmp(*e, "LD_PRELOAD=", 11)) env.push_back(*e);
+        env.push_back(nullptr);
         const pid_t pid = fork();
         if (pid < 0) return false;
         if (pid == 0) {
             setsid();
             if (fork() != 0) _exit(0);   // double fork: no zombie, survives on its own
-            std::vector<char*> a;
-            for (auto& s : argv) a.push_back(const_cast<char*>(s.c_str()));
-            a.push_back(nullptr);
-            // The AppImage runtime sets these for its own files: the browser must not inherit them.
-            unsetenv("LD_LIBRARY_PATH"); unsetenv("LD_PRELOAD");
-            execv(a[0], a.data());
+            execve(a[0], a.data(), env.data());
             _exit(127);
         }
         int st = 0; waitpid(pid, &st, 0);

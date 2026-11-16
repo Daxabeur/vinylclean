@@ -371,7 +371,8 @@ struct Engine {
     ma_context ctx{};
     bool ctxOk = false;
     ma_device dev{};
-    bool open = false;
+    std::atomic<bool> open{false};
+    std::atomic<bool> lost{false};   // the system stopped the device (unplugged, driver error…)
     Settings cfg;
     unsigned rate = 48000;
     int period = 512;
@@ -540,13 +541,18 @@ struct Engine {
         dc.noClip = MA_TRUE;
         dc.dataCallback = &Engine::callback;
         dc.pUserData = this;
+        dc.notificationCallback = [](const ma_device_notification* n) {
+            auto* e = static_cast<Engine*>(n->pDevice->pUserData);
+            if (n->type == ma_device_notification_type_stopped && e->open) e->lost = true;
+        };
         if (ma_device_init(&ctx, &dc, &dev) != MA_SUCCESS) { err = "cannot open the sound card at " + std::to_string(rate) + " Hz"; return false; }
-        if (ma_device_start(&dev) != MA_SUCCESS) { ma_device_uninit(&dev); err = "the sound card does not start"; return false; }
-        open = true;
+        lost = false;
+        open = true;   // before start(): a "stopped" notification is only meaningful once running
+        if (ma_device_start(&dev) != MA_SUCCESS) { open = false; ma_device_uninit(&dev); err = "the sound card does not start"; return false; }
         return true;
     }
     void stop() {
-        if (open) { ma_device_uninit(&dev); open = false; }
+        if (open) { open = false; ma_device_uninit(&dev); }
     }
     double latencyMs() const { return 1000.0 * (dec.latency() + period * cfg.periods) / rate; }
     ~Engine() { stop(); if (ctxOk) ma_context_uninit(&ctx); }
@@ -782,6 +788,15 @@ int main(int argc, char** argv) {
         });
         return "";
     };
+    // Already running (double-click twice…): open its window instead of starting a
+    // second sound engine on the same card.
+    for (int p = port; p < port + 20; ++p)
+        if (vcd::httpGetLocal(p, "/ping", 300) == "vinylclean\n") {
+            const std::string u = "http://127.0.0.1:" + std::to_string(p) + "/";
+            if (!noWindow) vcd::openWindow(u, cfgDir + "/window", browserOnly);
+            std::printf("vinylclean is already running: %s\n", u.c_str());
+            return 0;
+        }
     if (!web.start(port, lan, cb, err)) {
         std::fprintf(stderr, "Control page unavailable: %s\n", err.c_str());
 #ifdef _WIN32
@@ -809,7 +824,7 @@ int main(int argc, char** argv) {
     levels.reset(st.rate);
     double lST = -120, lInt = -120, lLRA = 0, lPLR = 0, lSec = 0;
     auto lastLoud = std::chrono::steady_clock::now(), lastBcast = lastLoud, lastSave = lastLoud, lastRecs = lastLoud;
-    auto lastClient = lastLoud, lastSound = lastLoud;
+    auto lastClient = lastLoud, lastSound = lastLoud, lastRetry = lastLoud;
     bool everConnected = false;
     unsigned lastSat = 0, lastSatP = 0;
     auto lastSatTime = lastLoud - std::chrono::seconds(10), lastSatPTime = lastSatTime;
@@ -878,6 +893,17 @@ int main(int argc, char** argv) {
             }
         }
 
+        // ---- Sound card lost (unplugged…) or not started: new attempt every 3 s (like the Pi) ----
+        if (engineOpen && eng.lost.load()) {
+            eng.stop(); engineOpen = false;
+            std::lock_guard<std::mutex> lk(stMutex); lastError = "sound card error";
+        }
+        if (!engineOpen && eng.ctxOk && !reconfig.load() && now - lastRetry > std::chrono::seconds(3)) {
+            lastRetry = now;
+            Settings want; { std::lock_guard<std::mutex> lk(stMutex); want = st; }
+            std::string e;
+            if (eng.start(want, e)) { engineOpen = true; good = want; meter.reset(eng.rate); levels.reset(eng.rate); std::lock_guard<std::mutex> lk(stMutex); lastError.clear(); }
+        }
         // ---- Audio reconfiguration (card, rate) ----
         if (reconfig.exchange(false)) {
             if (rec.recording()) recStop("stop_reconfig");

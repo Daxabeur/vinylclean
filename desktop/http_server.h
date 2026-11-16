@@ -56,5 +56,7 @@ private:
 };
 
 std::string urlDecode(const std::string& s);
+// Body of http://127.0.0.1:<port><path>, or "" (nothing there, timeout).
+std::string httpGetLocal(int port, const std::string& path, int timeoutMs);
 
 } // namespace vcd

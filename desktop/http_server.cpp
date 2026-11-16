@@ -113,10 +113,40 @@ std::string urlDecode(const std::string& s) {
     return o;
 }
 
+std::string httpGetLocal(int port, const std::string& path, int timeoutMs) {
+#ifdef _WIN32
+    WSADATA wd; WSAStartup(MAKEWORD(2, 2), &wd);
+    const SOCKET s = ::socket(AF_INET, SOCK_STREAM, 0);
+    if (s == INVALID_SOCKET) return "";
+    DWORD tv = DWORD(timeoutMs);
+    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&tv), sizeof tv);
+    setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char*>(&tv), sizeof tv);
+#else
+    const int s = ::socket(AF_INET, SOCK_STREAM, 0);
+    if (s < 0) return "";
+    timeval tv{timeoutMs / 1000, (timeoutMs % 1000) * 1000};
+    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv);
+    setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof tv);
+#endif
+    sockaddr_in a{};
+    a.sin_family = AF_INET;
+    a.sin_port = htons(uint16_t(port));
+    a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    std::string r;
+    if (::connect(s, reinterpret_cast<sockaddr*>(&a), sizeof a) == 0 &&
+        sendStr(intptr_t(s), "GET " + path + " HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")) {
+        char b[1024];
+        for (int k; (k = recvSome(intptr_t(s), b, sizeof b)) > 0 && r.size() < 65536;) r.append(b, size_t(k));
+    }
+    closeSock(intptr_t(s));
+    const size_t he = r.find("\r\n\r\n");
+    return (r.rfind("HTTP/1.1 200", 0) == 0 && he != std::string::npos) ? r.substr(he + 4) : "";
+}
+
 struct HttpServer::Client {
     intptr_t sock;
     std::mutex sendMu;
-    bool alive = true;
+    std::atomic<bool> alive{true};
     bool sendText(const std::string& t) {
         std::lock_guard<std::mutex> lk(sendMu);
         if (!alive) return false;
@@ -168,6 +198,12 @@ bool HttpServer::start(int port, bool lan, Callbacks cb, std::string& err) {
 
 void HttpServer::stop() {
     if (!run_.exchange(false)) return;
+    // Linux: close() alone does not wake a thread blocked in accept(); shutdown() does.
+#ifdef _WIN32
+    shutdown(static_cast<SOCKET>(listen_), SD_BOTH);
+#else
+    shutdown(int(listen_), SHUT_RDWR);
+#endif
     closeSock(listen_);
     {
         std::lock_guard<std::mutex> lk(mu_);
