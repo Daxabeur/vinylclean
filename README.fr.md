@@ -23,7 +23,8 @@ Platine → (préampli phono) → carte son USB → Pi : vc-live → sortie de l
 - **Enregistrement** de tes disques (son brut, FLAC 24 bits) depuis la page, avec boutons Télécharger et Supprimer.
 - **Anti-distorsion de fin de face** : tu indiques la longueur de ton bras, ton alignement (Stevenson, Baerwald,
   Löfgren B ou sur mesure) et ta pointe ; le logiciel calcule et retire la distorsion de lecture.
-- Sonie, plage dynamique (EBU R128) et écart crête / sonie de la dernière minute.
+- **Niveaux** : vu-mètres avec crête maintenue et saturation mémorisée, conseil de réglage, équilibre G/D, stéréo / mono /
+  phase, bruit de fond entre les morceaux, crête / moyenne.
 - **Page de réglage bilingue** (anglais / français), synchronisée sur tous les écrans ouverts.
 - **Version de bureau** pour Windows (.exe) et Linux (AppImage), avec **nettoyage de fichiers** (WAV / FLAC).
 
@@ -442,7 +443,7 @@ cmake/      compilation croisée (PC → Pi), facultatif
 Voir la liste complète dans [README.md](README.md#sources) : Godsill & Rayner (1998), Vaseghi & Rayner (1990),
 Janssen et al. (1986), Özdoğru (2022, 2025), Rund et al. (2021), Rajmic & Klimek (2004), Bello et al. (2005),
 IEC 60098, Löfgren (1938), Baerwald (1941), Stevenson (1966), Corrington (1951), Woodward & Fox (1947),
-ITU-R BS.1770-4, EBU R128, libFLAC, RFC 6455.
+ITU-R BS.1770-4, libFLAC, RFC 6455, miniaudio.
 
 ## Licence
 

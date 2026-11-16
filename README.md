@@ -22,7 +22,8 @@ Turntable → (phono preamp) → USB sound card → Pi: vc-live → sound card o
 - **Recording** of your records (raw sound, 24-bit FLAC) from the page, with download and delete buttons.
 - **End-of-side anti-distortion**: enter your tonearm length, alignment (Stevenson, Baerwald, Löfgren B or custom)
   and stylus type; the software computes and removes the playback distortion.
-- Loudness, dynamic range (EBU R128) and peak-to-loudness ratio of the last minute.
+- **Levels**: meters with peak hold and latched clipping, level advice, L/R balance, stereo / mono / phase check,
+  background noise between tracks, peak / average.
 - **Bilingual control page** (English / French), synchronized across all open screens.
 - **Desktop version** for Windows (.exe) and Linux (AppImage), with **file cleaning** (WAV / FLAC).
 
@@ -453,7 +454,7 @@ cd build && ctest
 - J. K. Stevenson, "Pickup arm design", Wireless World, May 1966.
 - M. S. Corrington, "Tracing distortion in phonograph records", RCA Review 12, 1951; J. G. Woodward, E. C. Fox, "Theory of tracing distortion", RCA Review, 1947.
 - J. F. Kaiser, Kaiser window (oversampling half-band filter).
-- ITU-R BS.1770-4 (loudness, K-weighting); EBU R128, EBU Tech 3341 and 3342 (loudness range LRA).
+- ITU-R BS.1770-4 (K-weighting, used for the peak / average ratio); EBU Tech 3341.
 - Xiph.Org, libFLAC (FLAC format, RFC 9639).
 - D. Reid, miniaudio (desktop audio input/output, public domain / MIT-0).
 - I. Fette, A. Melnikov, RFC 6455 "The WebSocket Protocol", 2011; FIPS 180-1 (SHA-1).
