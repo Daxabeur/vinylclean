@@ -323,6 +323,11 @@ void HttpServer::serve(intptr_t s) {
         closeSock(s);
         return;
     }
+    if (method == "GET" && path == "/simple.html" && cb_.simplePage) {
+        sendStr(s, response("200 OK", "text/html; charset=utf-8", cb_.simplePage()));
+        closeSock(s);
+        return;
+    }
     if (method == "GET" && path == "/ping") { sendStr(s, response("200 OK", "text/plain", "vinylclean\n")); closeSock(s); return; }
 
     // ---- Upload (file cleaning) ----

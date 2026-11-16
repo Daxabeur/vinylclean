@@ -26,6 +26,8 @@ public:
     };
 
     bool start(int port, const std::string& pageFile, const char* builtinPage, Callbacks cb, std::string& err);
+    // Other page (e.g. "/simple.html"), same rule: file on disk if present, else embedded. Before start().
+    void addPage(const std::string& path, const std::string& file, const char* builtin) { extra_.push_back({path, file, builtin}); }
     void stop();
     void broadcast(const std::string& text);  // queued, sent by the server thread
     int clients() const { return nClients_.load(); }
@@ -52,6 +54,8 @@ private:
     std::vector<std::string> queue_;
     std::string pageFile_;
     const char* builtin_ = nullptr;
+    struct Page { std::string path, file; const char* builtin; };
+    std::vector<Page> extra_;
     Callbacks cb_;
 };
 

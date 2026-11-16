@@ -57,15 +57,24 @@ struct LevelStats {
     uint32_t blockLen = 4800;
     // Results (NAN = not known yet).
     double balanceDb = NAN, correlation = NAN, noiseDb = NAN;
+    // VU meters of the touchscreen page: L² and R² since the last takeVu().
+    double vuLL = 0, vuRR = 0; uint32_t vuN = 0;
 
-    void reset(unsigned rate) { blocks.clear(); cur = Block{}; blockLen = std::max(1u, rate / 10); balanceDb = correlation = noiseDb = NAN; }
+    void reset(unsigned rate) { blocks.clear(); cur = Block{}; blockLen = std::max(1u, rate / 10); balanceDb = correlation = noiseDb = NAN; vuLL = vuRR = 0; vuN = 0; }
     void add(const LevelItem& it) {
         cur.ll += it.ll; cur.rr += it.rr; cur.lr += it.lr; cur.n += it.n;
+        vuLL += it.ll; vuRR += it.rr; vuN += it.n;
         if (cur.n >= blockLen) {
             blocks.push_back(cur);
             cur = Block{};
             while (blocks.size() > 1800) blocks.pop_front();
         }
+    }
+    // RMS level of each channel (dBFS) since the previous call (≈ 100 ms), then restart.
+    void takeVu(double& l, double& r) {
+        auto db = [](double ms) { return ms > 1e-12 ? 10.0 * std::log10(ms) : -120.0; };
+        l = vuN ? db(vuLL / vuN) : -120.0; r = vuN ? db(vuRR / vuN) : -120.0;
+        vuLL = vuRR = 0; vuN = 0;
     }
     void compute() {
         const size_t nb = blocks.size();

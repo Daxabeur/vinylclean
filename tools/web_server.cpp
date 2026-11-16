@@ -209,11 +209,14 @@ void WebServer::handleHttp(Client& c) {
         c.fd = -1;
         return;
     }
-    if (method == "GET" && (base == "/" || base == "/index.html")) {
+    std::string file; const char* builtin = nullptr; bool found = false;
+    if (base == "/" || base == "/index.html") { file = pageFile_; builtin = builtin_; found = true; }
+    for (const auto& p : extra_) if (base == p.path) { file = p.file; builtin = p.builtin; found = true; }
+    if (method == "GET" && found) {
         std::string page;
-        std::ifstream f(pageFile_);
-        if (!pageFile_.empty() && f) { std::stringstream ss; ss << f.rdbuf(); page = ss.str(); }
-        else page = builtin_ ? builtin_ : "";
+        std::ifstream f(file);
+        if (!file.empty() && f) { std::stringstream ss; ss << f.rdbuf(); page = ss.str(); }
+        else page = builtin ? builtin : "";
         c.out += httpResponse("200 OK", "text/html; charset=utf-8", page);
     } else {
         c.out += httpResponse("404 Not Found", "text/plain; charset=utf-8", "not found\n");

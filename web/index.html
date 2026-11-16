@@ -143,12 +143,60 @@
     font: inherit; font-size: 12px; font-weight: 600; padding: 4px 9px; cursor: pointer; }
   .lang button.sel { background: var(--acc); color: #1a1408; border-color: var(--acc); }
   header .lang + .info { margin-left: 10px; }
+  .vulink { margin-left: auto; color: var(--acc); font-size: 13px; font-weight: 600; text-decoration: none;
+    border: 1px solid var(--line); border-radius: 8px; padding: 4px 9px; white-space: nowrap; }
+  .vulink + .lang { margin-left: 8px; }
+  header { flex-wrap: wrap; row-gap: 4px; }
+  header .info { white-space: nowrap; }
+  @media (max-width: 520px) { header .lang + .info { margin-left: auto; } }
+  /* ---- Page mode (touchscreen of the box, index.html?mode=pages): one group of
+     settings per screen, never any scrolling; arrows, swipe and dots. ---- */
+  body.pages { max-width: none; height: 100vh; height: 100dvh; padding: 0; margin: 0; overflow: hidden; display: block; }
+  body.pages > :not(#pgUi) { display: none !important; }   /* normal layout (and the desktop card) hidden */
+  #pgUi { display: none; }
+  body.pages #pgUi { display: flex; flex-direction: column; position: fixed; inset: 0; background: var(--bg); }
+  .pg-top, .pg-bot { flex: none; display: flex; align-items: center; gap: 10px; padding: 6px 8px; }
+  .pg-top { border-bottom: 1px solid var(--line); }
+  .pg-bot { border-top: 1px solid var(--line); }
+  .pg-title { flex: 1; text-align: center; font-weight: 650; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pg-title small { color: var(--dim); font-weight: 500; margin-left: 6px; }
+  .pg-btn { min-width: 64px; min-height: 48px; border-radius: 12px; border: 1px solid var(--line); background: #252931;
+    color: var(--txt); font: inherit; font-weight: 700; cursor: pointer; padding: 0 12px; touch-action: manipulation; }
+  .pg-btn.arrow { min-width: 88px; font-size: 22px; }
+  .pg-btn:disabled { opacity: .3; }
+  .pg-btn.simple { color: var(--acc); font-size: 15px; }
+  .pg-dots { flex: 1; display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 4px; min-height: 44px; }
+  .pg-dots button { width: 22px; height: 44px; border: 0; background: none; padding: 0; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .pg-dots button::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: #3a3f48; }
+  .pg-dots button.sel::before { background: var(--acc); width: 13px; height: 13px; }
+  .pg-dots button.gs { margin-left: 8px; }
+  .pg-alerts { flex: none; padding: 0 8px; }
+  .pg-alerts .alert { margin: 6px 0 0; padding: 7px 12px; }
+  .pg-view { flex: 1; min-height: 0; position: relative; overflow: hidden; padding: 8px; touch-action: none; }
+  .pg { position: absolute; inset: 8px; overflow: hidden; background: var(--card); border: 1px solid var(--line);
+    border-radius: var(--r); padding: 10px 14px; column-gap: 26px; column-fill: auto; display: none; }
+  .pg.cur { display: block; animation: pgIn .18s ease-out; }
+  .pg.meas { display: block; visibility: hidden; }
+  @keyframes pgIn { from { opacity: .4; transform: translateX(var(--from, 0)); } to { opacity: 1; transform: none; } }
+  .pg > * { break-inside: avoid; }
+  .pg > :first-child, .pg > .row:first-child { margin-top: 0; }
+  .pg h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .8px; color: var(--dim); margin: 10px 0 6px; font-weight: 600; }
+  .pg > h2:first-child, .pg > .pgw:first-child > h2:first-child { display: none; }
+  .pg > .pgw > h2 { margin-top: 10px; }
+  .pg > .pgw:first-child > .sub { margin-top: 0; padding-top: 0; border-top: 0; }
+  .pg > .sub:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+  .pg .stats { margin-top: 10px; }
+  .pg .reclist li:first-child { border-top: 0; padding-top: 2px; }
+  .pg > .reclist { margin: 0; }
+  .pg > .reclist li { break-inside: avoid; }
+  body.pages input[type=text] { min-height: 44px; }
 </style>
 </head>
 <body>
 <header>
   <span class="dot" id="dot"></span>
   <h1>vinylclean</h1>
+  <a class="vulink" href="/simple.html" data-i18n="vu.link"></a>
   <div class="lang" id="lang"><button data-v="en">EN</button><button data-v="fr">FR</button></div>
   <div class="info" id="info"></div>
 </header>
@@ -342,6 +390,11 @@
         <p class="hint" data-i18n="adv.stereo.h"></p>
       </div>
       <p class="note" data-i18n="adv.note"></p>
+      <div class="row">
+        <label><span class="lbl" data-i18n="adv.vuRef"></span> <span id="vVuRef">–</span></label>
+        <input type="range" id="vuRef" min="-24" max="-8" step="1">
+        <p data-i18n="adv.vuRef.s"></p>
+      </div>
       <h3 class="sub" data-i18n="phono.title"></h3>
       <div class="seg" id="riaa">
         <button data-v="0"><span data-i18n="phono.ext"></span><small data-i18n="phono.ext.s"></small></button>
@@ -365,8 +418,8 @@
 
   <section class="card" id="recCard">
     <h2 data-i18n="rec.title"></h2>
-    <label for="recName" data-i18n="rec.name"></label>
-    <input type="text" id="recName" maxlength="150" autocomplete="off">
+    <div><label for="recName" data-i18n="rec.name"></label>
+    <input type="text" id="recName" maxlength="150" autocomplete="off"></div>
     <div class="row">
       <label data-i18n="rec.source"></label>
       <div class="seg" id="recClean" style="margin-top:6px">
@@ -399,6 +452,21 @@
       <button class="btn" id="apply" data-i18n="card.apply"></button>
     </details>
   </section>
+</div>
+
+<div id="pgUi">
+  <div class="pg-top">
+    <button class="pg-btn simple" id="pgSimple" data-i18n="pg.simple"></button>
+    <div class="pg-title" id="pgTitle"></div>
+    <span class="dot" id="pgDot"></span>
+  </div>
+  <div class="pg-alerts" id="pgAlerts"></div>
+  <div class="pg-view" id="pgView"></div>
+  <div class="pg-bot">
+    <button class="pg-btn arrow" id="pgPrev">◀</button>
+    <div class="pg-dots" id="pgDots"></div>
+    <button class="pg-btn arrow" id="pgNext">▶</button>
+  </div>
 </div>
 
 <script>
@@ -482,7 +550,12 @@ const I18N = {
     "card.apply": "Apply (≈ 1 s of silence)", "card.current": "{0} (current)",
     "card.two": "Two different cards: their clocks drift slightly. Small dropouts are possible every few minutes (no drift correction yet).",
     "card.best": "Best format of the card: {0}. Always at maximum quality, without conversion.",
-    "card.heavy": "  ⚠ too heavy for this Pi (≈ {0} %)", "card.est": "  (≈ {0} % of one core)"
+    "card.heavy": "  ⚠ too heavy for this Pi (≈ {0} %)", "card.est": "  (≈ {0} % of one core)",
+    "vu.link": "VU meters", "adv.vuRef": "VU meter reference", "adv.vuRef.v": "0 VU = {0} dBFS",
+    "adv.vuRef.s": "Level that puts the needles of the VU meter view on 0 (sine reference). −18 dBFS is the usual studio value; lower it if the needles stay too low.",
+    "pg.simple": "◉ Simple view", "pg.prev": "Previous page", "pg.next": "Next page",
+    "pg.1": "Listening and sensitivity", "pg.2": "Levels and counters", "pg.3": "Anti-distortion",
+    "pg.4": "Advanced settings and phono preamp", "pg.5": "Recording", "pg.6": "My recordings", "pg.7": "Sound card"
   },
   fr: {
     connecting: "connexion…", disconnected: "déconnecté…", stopped: "audio arrêté", changingCard: "changement de carte…",
@@ -558,7 +631,12 @@ const I18N = {
     "card.apply": "Appliquer (≈ 1 s de silence)", "card.current": "{0} (actuelle)",
     "card.two": "Deux cartes différentes : leurs horloges dérivent un peu. Petites coupures possibles toutes les quelques minutes (correction de dérive pas encore disponible).",
     "card.best": "Meilleur format de la carte : {0}. Toujours en qualité maximale, sans conversion.",
-    "card.heavy": "  ⚠ trop lourd pour ce Pi (≈ {0} %)", "card.est": "  (≈ {0} % d'un cœur)"
+    "card.heavy": "  ⚠ trop lourd pour ce Pi (≈ {0} %)", "card.est": "  (≈ {0} % d'un cœur)",
+    "vu.link": "VU-mètres", "adv.vuRef": "Référence des VU-mètres", "adv.vuRef.v": "0 VU = {0} dBFS",
+    "adv.vuRef.s": "Niveau qui met les aiguilles de la vue VU-mètres sur 0 (référence sinus). −18 dBFS est la valeur habituelle en studio ; baisse-la si les aiguilles restent trop bas.",
+    "pg.simple": "◉ Vue simple", "pg.prev": "Page précédente", "pg.next": "Page suivante",
+    "pg.1": "Écoute et sensibilité", "pg.2": "Niveaux et compteurs", "pg.3": "Anti-distorsion",
+    "pg.4": "Paramètres avancés et préampli phono", "pg.5": "Enregistrement", "pg.6": "Mes enregistrements", "pg.7": "Carte son"
   }
 };
 function pickLang() {
@@ -631,6 +709,8 @@ function render() {
     if (dragging !== id) $(id).value = S[id];
     $("v" + id[0].toUpperCase() + id.slice(1)).textContent = fmt(S[id]);
   }
+  if (dragging !== "vuRef") $("vuRef").value = S.vuRef ?? -18;
+  $("vVuRef").textContent = t("adv.vuRef.v", String(Math.round(S.vuRef ?? -18)).replace("-", "−"));
   renderAd();
   fillCards();
 }
@@ -876,7 +956,7 @@ for (const id of ["armLen", "null1", "null2", "stylusUm", "align", "stylus", "di
   $(id).addEventListener("change", () => { const v = +$(id).value; if (!isFinite(v)) return; S[id] = v; render(); send({cmd: "set", [id]: v}); });
 }
 $("adSide").addEventListener("click", () => send({cmd: "ad_side"}));
-for (const id of ["declick", "decrackle", "maxclick", "phonoGain", "posMm", "adInt", "sideMin"]) {
+for (const id of ["declick", "decrackle", "maxclick", "phonoGain", "posMm", "adInt", "sideMin", "vuRef"]) {
   const el = $(id);
   el.addEventListener("pointerdown", () => dragging = id);
   el.addEventListener("input", () => { S[id] = +el.value; render(); sendSoon({[id]: +el.value}); });
@@ -889,6 +969,183 @@ $("apply").addEventListener("click", () => {
   send({cmd: "set", in: $("inDev").value, out: $("outDev").value, rate: +$("rate").value});
   $("info").textContent = t("changingCard");
 });
+// ---- Page mode (index.html?mode=pages, opened from the simple view of the box screen) ----
+// The page keeps its normal layout (scrolling) everywhere else. In page mode the
+// settings are cut into groups; a group that does not fit the height of the
+// screen is split AUTOMATICALLY into several pages (measured after rendering and
+// on every resize), never scrolled. The elements are moved, not copied: all the
+// existing handlers keep working.
+const PG = {
+  on: /[?&]mode=pages\b/.test(location.search),
+  groups: [], pages: [], cur: 0, timer: 0, anchor: null
+};
+if (PG.on) {
+  document.body.classList.add("pages", "kiosk");
+  // Items of a group: the children of its sections, opened containers flattened.
+  // An item whose original container is hidden (e.g. anti-distortion off) is left out.
+  const FLAT = new Set(["lvBox", "adBox", "armBox", "advBox", "phonoBox", "cardBox"]);
+  const collect = (el, deps, out) => {
+    for (const c of Array.from(el.children)) {
+      if (c.tagName === "SUMMARY") {
+        // The title of a folding box becomes a sub-heading (same translation key).
+        if (c.closest("#lvBox, #advBox, #cardBox")) continue;   // already the name of the page
+        const h = document.createElement("h3"); h.className = "sub"; h.dataset.i18n = c.dataset.i18n || "";
+        out.push({node: h, deps}); continue;
+      }
+      if (FLAT.has(c.id)) { collect(c, deps.concat(c), out); continue; }
+      if (c.id === "recList") { out.push({list: c, deps}); continue; }
+      out.push({node: c, deps});
+    }
+  };
+  const sec = sel => document.querySelectorAll(sel);
+  const cards = Array.from(sec("section.card"));
+  const byId = id => document.getElementById(id).closest("section.card");
+  const G = [
+    ["pg.1", [cards[0], cards[1]]],
+    ["pg.2", [byId("lvCard"), byId("sClicks")]],
+    ["pg.3", [byId("adCard")]],
+    ["pg.4", [byId("advBox")]],
+    ["pg.5", [byId("recCard")]],
+    ["pg.6", [byId("recsCard")]],
+    ["pg.7", [byId("cardBox")]]
+  ];
+  for (const [key, secs] of G) {
+    const items = [];
+    for (const sc of secs) collect(sc, [], items);
+    // A heading never ends a column or a page alone: it is kept with what follows it.
+    for (let i = items.length - 2; i >= 0; --i) {
+      const a = items[i], b = items[i + 1];
+      if (!a.node || !b.node || !/^H[23]$/.test(a.node.tagName)) continue;
+      const w = document.createElement("div"); w.className = "pgw";
+      w.append(a.node, b.node);
+      items.splice(i, 2, {node: w, deps: a.deps.concat(b.deps)});
+    }
+    PG.groups.push({key, items});
+  }
+  $("cardBox").open = true;
+  for (const id of ["sat", "satPhono", "err"]) $("pgAlerts").appendChild($(id));
+  PG.view = $("pgView");
+  PG.park = document.createElement("div"); PG.park.hidden = true; document.body.appendChild(PG.park);
+
+  PG.visible = it => !it.deps.some(d => d.hidden);
+  // Builds all the pages. Each item goes into the current page; if the page then
+  // overflows (height, or more columns than the screen has), the item starts a new page.
+  PG.build = function () {
+    const v = this.view, W = v.clientWidth - 16;
+    const cols = Math.max(1, Math.min(3, Math.floor(W / 360)));
+    const keep = this.anchor;
+    for (const li of v.querySelectorAll(".pg > ul.reclist > li")) $("recList").appendChild(li);   // back to their list, in order
+    for (const p of this.pages) p.el.remove();
+    this.pages = [];
+    const over = el => el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1;
+    const park = this.park;
+    this.groups.forEach((g, gi) => {
+      let page = null;
+      const newPage = () => {
+        const el = document.createElement("div");
+        el.className = "pg meas"; el.style.columnCount = cols;
+        v.appendChild(el);
+        page = {el, g: gi, nodes: []}; this.pages.push(page);
+      };
+      const fits = () => !over(page.el);
+      const add = node => {
+        page.el.appendChild(node);
+        if (!fits() && page.el.children.length > 1) { newPage(); page.el.appendChild(node); }
+        page.nodes.push(node);
+      };
+      const mkUl = () => { const u = document.createElement("ul"); u.className = "reclist"; page.el.appendChild(u); return u; };
+      const addLi = li => {
+        let ul = page.el.lastElementChild;
+        if (!ul || ul.tagName !== "UL") ul = mkUl();
+        ul.appendChild(li);
+        if (!fits() && (page.el.children.length > 1 || ul.children.length > 1)) {
+          li.remove(); if (!ul.children.length) ul.remove();
+          newPage(); mkUl().appendChild(li);
+        }
+        page.nodes.push(li);
+      };
+      newPage();
+      for (const it of g.items) {
+        // Hidden items wait in a hidden holder (they stay in the document: the
+        // update functions still find them by their id).
+        if (!this.visible(it)) { if (it.node) park.appendChild(it.node); continue; }
+        if (it.list) { for (const li of Array.from(it.list.querySelectorAll(":scope > li"))) addLi(li); continue; }
+        add(it.node);
+      }
+    });
+    for (const p of this.pages) p.el.classList.remove("meas");
+    // Stay on the page that holds the element seen before.
+    let to = Math.min(this.cur, this.pages.length - 1);
+    if (keep) { const i = this.pages.findIndex(p => p.nodes.includes(keep)); if (i >= 0) to = i; }
+    this.show(to, 0);
+  };
+  PG.show = function (i, dir) {
+    if (!this.pages.length) return;
+    i = Math.max(0, Math.min(this.pages.length - 1, i));
+    this.pages.forEach((p, k) => p.el.classList.toggle("cur", k === i));
+    const p = this.pages[i];
+    p.el.style.setProperty("--from", dir > 0 ? "40px" : dir < 0 ? "-40px" : "0");
+    if (dir) { p.el.style.animation = "none"; void p.el.offsetWidth; p.el.style.animation = ""; }
+    this.cur = i; this.anchor = p.nodes[0] || null;
+    const same = this.pages.filter(q => q.g === p.g), k = same.indexOf(p);
+    $("pgTitle").innerHTML = esc(t(this.groups[p.g].key)) + (same.length > 1 ? "<small>" + (k + 1) + "/" + same.length + "</small>" : "");
+    const d = $("pgDots"); d.innerHTML = "";
+    this.pages.forEach((q, j) => {
+      const b = document.createElement("button");
+      b.setAttribute("aria-label", t(this.groups[q.g].key));
+      if (j === i) b.classList.add("sel");
+      if (j > 0 && this.pages[j - 1].g !== q.g) b.classList.add("gs");
+      b.addEventListener("click", () => this.show(j, j > this.cur ? 1 : -1));
+      d.appendChild(b);
+    });
+    $("pgPrev").disabled = i === 0; $("pgNext").disabled = i === this.pages.length - 1;
+    if (this.groups[p.g].key === "pg.7") send({cmd: "cards"});
+  };
+  // Rebuild soon (not while a slider is held or a list / text field is in use).
+  PG.soon = function () {
+    clearTimeout(this.timer);
+    this.timer = setTimeout(() => {
+      const a = document.activeElement;
+      if (dragging || (a && /^(SELECT|INPUT)$/.test(a.tagName) && a.type !== "range")) { this.soon(); return; }
+      this.build();
+    }, 80);
+  };
+  // Cheap check on every status message: rebuild only if the current page overflows.
+  PG.check = function () {
+    const p = this.pages[this.cur];
+    if (p && (p.el.scrollHeight > p.el.clientHeight + 1 || p.el.scrollWidth > p.el.clientWidth + 1)) this.soon();
+  };
+  $("pgPrev").addEventListener("click", () => PG.show(PG.cur - 1, -1));
+  $("pgNext").addEventListener("click", () => PG.show(PG.cur + 1, 1));
+  $("pgSimple").addEventListener("click", () => { location.href = "/simple.html"; });
+  // Swipe left / right (not when it starts on a control).
+  let sw = null;
+  PG.view.addEventListener("pointerdown", e => {
+    sw = e.target.closest("input, select, button, a, .seg, svg") ? null : {x: e.clientX, y: e.clientY, t: Date.now()};
+  });
+  PG.view.addEventListener("pointerup", e => {
+    if (!sw) return;
+    const dx = e.clientX - sw.x, dy = e.clientY - sw.y;
+    if (Math.abs(dx) > 50 && Math.abs(dx) > 1.5 * Math.abs(dy) && Date.now() - sw.t < 800) PG.show(PG.cur + (dx < 0 ? 1 : -1), dx < 0 ? 1 : -1);
+    sw = null;
+  });
+  PG.view.addEventListener("pointercancel", () => { sw = null; });
+  document.addEventListener("keydown", e => {
+    if (document.activeElement && /^(INPUT|SELECT)$/.test(document.activeElement.tagName)) return;
+    if (e.key === "ArrowRight" || e.key === "PageDown") PG.show(PG.cur + 1, 1);
+    if (e.key === "ArrowLeft" || e.key === "PageUp") PG.show(PG.cur - 1, -1);
+  });
+  document.addEventListener("contextmenu", e => e.preventDefault());
+  let rz = 0;
+  window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => PG.build(), 100); });
+  // Hooks on the normal update functions.
+  const _render = render, _status = status, _renderRecs = renderRecs, _applyLang = applyLang;
+  render = function () { _render(); PG.soon(); };
+  status = function () { _status(); PG.check(); $("pgDot").classList.toggle("on", !!(ws && ws.readyState === 1)); };
+  renderRecs = function () { for (const li of PG.view.querySelectorAll(".pg > ul.reclist > li")) li.remove(); _renderRecs(); PG.soon(); };
+  applyLang = function () { _applyLang(); if (PG.pages.length) PG.show(PG.cur, 0); PG.soon(); };
+  PG.build();
+}
 applyLang();
 connect();
 </script>

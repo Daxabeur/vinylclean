@@ -6,12 +6,28 @@
 # "cage" (minimal full-screen compositor, no desktop). If cog is not available,
 # Chromium in kiosk mode (uses more memory).
 #
-#   ./scripts/kiosk-install.sh            install and start the screen
-#   ./scripts/kiosk-install.sh --remove   remove the screen (sound keeps running)
+# The screen opens the "simple view" (two VU meters + sensitivity slider); its
+# "Advanced" button opens all the settings, one page per group, without scrolling.
+#
+#   ./scripts/kiosk-install.sh                       install and start the screen
+#   ./scripts/kiosk-install.sh --remove              remove the screen (sound keeps running)
+#   ./scripts/kiosk-install.sh --resolution 1024x600 force the HDMI resolution (then reboot)
 set -e
 cd "$(dirname "$0")/.."
 USER_NAME="${SUDO_USER:-$USER}"
-URL="http://127.0.0.1:8080/?kiosk=1"
+URL="http://127.0.0.1:8080/simple.html"
+
+if [ "$1" = "--resolution" ]; then
+    RES="$2"
+    if ! [[ "$RES" =~ ^[0-9]{3,4}x[0-9]{3,4}$ ]]; then echo "Example: $0 --resolution 1024x600"; exit 1; fi
+    F=/boot/firmware/cmdline.txt; [ -f "$F" ] || F=/boot/cmdline.txt
+    sudo cp "$F" "$F.before-vinylclean"
+    # cmdline.txt is ONE line: replace an older HDMI-A-1 setting, then put ours at the start.
+    sudo sed -i -E "s/ ?video=HDMI-A-1:[^ ]*//g; 1s/^/video=HDMI-A-1:${RES}@60 /" "$F"
+    echo "Done: $(head -c 120 "$F")..."
+    echo "Backup: $F.before-vinylclean. Reboot to apply: sudo reboot"
+    exit 0
+fi
 
 if [ "$1" = "--remove" ]; then
     sudo systemctl disable --now vinylclean-kiosk.service 2>/dev/null || true

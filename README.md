@@ -96,11 +96,11 @@ vc-bench --rate 48000 --seconds 10
 - **Recording**: file name, **raw or cleaned** sound, record / stop, list of recordings with download and delete.
 - **Anti-distortion**: turntable and cartridge settings, tracking-error graph.
 - **Advanced settings**: separate declick / decrackle sensitivities, fine intensities, maximum click length,
-  multiband / full band, linked / separate channels.
+  multiband / full band, linked / separate channels, reference of the VU meters.
 - **Sound card and quality**: input, output and sample rate among what the cards really accept, with the
   estimated load. Changing the card or the rate cuts the sound for about 1 second; if the new configuration
   fails, the previous one is restored automatically.
-- **EN / FR** button in the top bar (the choice is remembered by the browser).
+- **EN / FR** button in the top bar (the choice is remembered by the browser), **VU meters** button (simple view, see *Touchscreen*).
 
 All open screens stay **synchronized**. Settings are saved in `~/.config/vinylclean/settings.json` and
 reloaded at startup.
@@ -145,6 +145,7 @@ The **Clicks and crackles** slider sets the declicker and the decrackler togethe
 - **Maximum click length** (0.5 to 5 ms, default 2.5 ms).
 - **Repair**: Multiband (default) or Full band.
 - **Stereo**: Linked channels (default) or Separate channels.
+- **VU meter reference** (−24 to −8 dBFS, default −18): level that puts the needles of the simple view on 0 VU.
 
 ### Levels
 
@@ -297,17 +298,39 @@ music dominates (usually the bass): the music is not re-invented needlessly.
 
 ## Touchscreen
 
-Official Raspberry Pi screen (DSI), or an HDMI screen with USB touch. After the installation above:
+Official Raspberry Pi screen (DSI), or an HDMI screen with USB touch (for example a 7" 1024 × 600 capacitive
+screen: picture through HDMI, touch through the USB cable, no driver). After the installation above:
 
 ```bash
 cd ~/vinylclean
 ./scripts/kiosk-install.sh
 ```
 
-The screen shows the same page full screen, in two columns on an 800 × 480 screen. Lightweight browser "cog"
-(WPE WebKit) inside "cage", no desktop; Chromium if cog is not available. The screen runs at low priority: it
-cannot disturb the sound, which keeps its real-time priority.
+The screen opens the **simple view** (`simple.html`): two needle **VU meters** (left / right) in the style
+of a 1970s hi-fi, the **cleaning sensitivity** slider and an **Advanced** button.
 
+- VU meters: RMS level of the turntable signal, real VU ballistics (99 % of the reading in 300 ms).
+  **0 VU = −18 dBFS** (sine reference), adjustable in *Advanced settings → VU meter reference*.
+  Red light: a peak above −1 dBFS. Amber light: blinks when a click is repaired.
+- The slider is the same setting as on the full page: every screen stays synchronized.
+- **Advanced** opens all the settings **one page per group**, without any scrolling: ◀ ▶ arrows, swipe with the
+  finger, dots at the bottom, **Simple view** button at the top. A group that does not fit the height of the
+  screen is split automatically into several pages.
+- On a phone, the **VU meters** button at the top of the full page opens the simple view.
+
+The page adapts to the screen: 1024 × 600 and 800 × 480 (meters side by side), wide bars such as 1920 × 480
+(vertical slider on the right), phones in portrait (meters one above the other). Lightweight browser "cog"
+(WPE WebKit) inside "cage", no desktop; Chromium if cog is not available. The screen runs at low priority: it
+cannot disturb the sound, which keeps its real-time priority. The needles are drawn at most 30 times per
+second, and nothing is drawn when they are still.
+
+- **HDMI screen not shown at 1024 × 600** (picture too small, blurred or cut): force its resolution, then reboot.
+  ```bash
+  ./scripts/kiosk-install.sh --resolution 1024x600
+  sudo reboot
+  ```
+  This adds `video=HDMI-A-1:1024x600@60` at the start of the single line of `/boot/firmware/cmdline.txt`
+  (a backup copy is kept next to it).
 - Remove the screen: `./scripts/kiosk-install.sh --remove` (the sound keeps running).
 - Upside-down picture (official screen): add `display_lcd_rotate=2` or, with the KMS driver,
   `video=DSI-1:800x480@60,rotate=180` at the end of `/boot/firmware/cmdline.txt`, then reboot.
@@ -421,7 +444,7 @@ variables.
 ```
 core/       DSP: ar, lsar, declick, decrackle (+ chain), antidist (anti-distortion), riaa.h, presets.h
 tools/      vc_live.cpp, web_server.*, sha1.h, loudness.h, recorder.h, vc_file.cpp, vc_bench.cpp, wav.h, offline.h
-web/        index.html (control page, English / French)
+web/        index.html (control page, English / French), simple.html (touchscreen: VU meters)
 desktop/    Windows / Linux version (vc_desktop.cpp, http_server.*, extra.html, build.sh, packaging/)
 tests/      test_declick.cpp, test_decrackle.cpp, test_loudness.cpp, test_recorder.cpp, test_riaa.cpp, test_antidist.cpp, synth.h
 scripts/    install.sh, kiosk-install.sh, systemd services, default options

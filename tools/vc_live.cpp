@@ -16,6 +16,7 @@
 #include "presets.h"
 #include "web_server.h"
 #include "index_html.h"
+#include "simple_html.h"
 #include <alsa/asoundlib.h>
 #include <algorithm>
 #include <atomic>
@@ -104,6 +105,7 @@ struct Settings {
     float phonoGainDb = 12.f;
     bool rumble = true;
     bool recClean = false;         // recording: false = raw turntable sound, true = cleaned sound
+    float vuRef = -18.f;           // VU meters of the touchscreen page: dBFS that reads 0 VU
     // Anti-distortion
     bool adOn = false, adAutoPos = true;
     float armLen = 222.f, null1 = 60.325f, null2 = 117.42f, stylusUm = 7.6f;
@@ -123,10 +125,10 @@ static std::string settingsToJson(const Settings& s) {
     char b[2048];
     std::snprintf(b, sizeof b,
                   "{\"scale\":3,\"ad\":%d,\"armLen\":%g,\"align\":%d,\"null1\":%g,\"null2\":%g,\"stylus\":%d,\"stylusUm\":%g,\"disc\":%d,\"autoPos\":%d,\"posMm\":%g,\"sideMin\":%g,\"adInt\":%g,"
-                  "\"sens\":%d,\"sensDeclick\":%d,\"sensDecrackle\":%d,\"declick\":%g,\"decrackle\":%g,\"protect\":%d,\"maxclick\":%g,\"multiband\":%d,\"stereo\":%d,\"riaa\":%d,\"phonoGain\":%g,\"rumble\":%d,\"recClean\":%d,\"mode\":%d,"
+                  "\"sens\":%d,\"sensDeclick\":%d,\"sensDecrackle\":%d,\"declick\":%g,\"decrackle\":%g,\"protect\":%d,\"maxclick\":%g,\"multiband\":%d,\"stereo\":%d,\"riaa\":%d,\"phonoGain\":%g,\"rumble\":%d,\"recClean\":%d,\"vuRef\":%g,\"mode\":%d,"
                   "\"in\":\"%s\",\"out\":\"%s\",\"rate\":%u,\"periods\":%d}",
                   s.adOn ? 1 : 0, s.armLen, s.align, s.null1, s.null2, s.stylus, s.stylusUm, s.disc, s.adAutoPos ? 1 : 0, s.posMm, s.sideMin, s.adInt,
-                  commonSens(s), declickSensForIntensity(s.declick), decrackleSensForIntensity(s.decrackle), s.declick, s.decrackle, s.protect, s.maxClick, s.multiband ? 1 : 0, s.stereo ? 1 : 0, s.riaa ? 1 : 0, s.phonoGainDb, s.rumble ? 1 : 0, s.recClean ? 1 : 0, s.mode,
+                  commonSens(s), declickSensForIntensity(s.declick), decrackleSensForIntensity(s.decrackle), s.declick, s.decrackle, s.protect, s.maxClick, s.multiband ? 1 : 0, s.stereo ? 1 : 0, s.riaa ? 1 : 0, s.phonoGainDb, s.rumble ? 1 : 0, s.recClean ? 1 : 0, s.vuRef, s.mode,
                   jsonEscape(s.inDev).c_str(), jsonEscape(s.outDev).c_str(), s.rate, s.periods);
     return b;
 }
@@ -144,6 +146,7 @@ static void settingsFromJson(const JsonFlat& j, Settings& s) {
     if (j.has("phonoGain")) s.phonoGainDb = float(std::fmin(40, std::fmax(0, j.num("phonoGain"))));
     if (j.has("rumble")) s.rumble = j.num("rumble") != 0;
     if (j.has("recClean")) s.recClean = j.num("recClean") != 0;
+    if (j.has("vuRef")) s.vuRef = float(std::fmin(-8, std::fmax(-24, j.num("vuRef"))));
     auto clampf = [](double v, double lo, double hi) { return float(std::fmin(hi, std::fmax(lo, v))); };
     if (j.has("ad")) s.adOn = j.num("ad") != 0;
     if (j.has("armLen")) s.armLen = clampf(j.num("armLen"), 150, 400);
@@ -725,6 +728,9 @@ int main(int argc, char** argv) {
     };
     if (httpPort > 0) {
         std::string err;
+        // Touchscreen page (VU meters): next to the main page on disk, or embedded.
+        const size_t sl = webFile.rfind('/');
+        web.addPage("/simple.html", (sl == std::string::npos ? std::string() : webFile.substr(0, sl + 1)) + "simple.html", kSimpleHtml);
         if (!web.start(httpPort, webFile, kIndexHtml, cb, err)) std::printf("Control page unavailable: %s\n", err.c_str());
         else if (!quiet) std::printf("Control page: http://%s.local:%d  (or http://<Pi address>:%d)\n",
                                      [] { static char h[64]; gethostname(h, sizeof h); return h; }(), httpPort, httpPort);
@@ -1006,6 +1012,8 @@ int main(int argc, char** argv) {
                 auto num = [](double v, const char* f) { char t[32]; if (std::isfinite(v)) std::snprintf(t, sizeof t, f, v); else std::snprintf(t, sizeof t, "null"); return std::string(t); };
                 full.insert(full.size() - 1, ",\"bal\":" + num(levels.balanceDb, "%.1f") + ",\"corr\":" + num(levels.correlation, "%.2f") +
                                              ",\"noise\":" + num(levels.noiseDb, "%.0f") + ",\"recClean\":" + (sh.recClean ? "true" : "false"));
+                double vl, vr; levels.takeVu(vl, vr);
+                full.insert(full.size() - 1, ",\"vuL\":" + num(vl, "%.1f") + ",\"vuR\":" + num(vr, "%.1f"));
             }
             web.broadcast(full);
         }

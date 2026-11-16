@@ -26,6 +26,7 @@ class HttpServer {
 public:
     struct Callbacks {
         std::function<std::string()> page;                                   // GET /
+        std::function<std::string()> simplePage;                             // GET /simple.html (VU meters)
         std::function<std::vector<std::string>()> onConnect;                 // messages for a new WebSocket client
         std::function<std::string(const std::string&)> onMessage;            // text message; optional reply
         std::function<ServedFile(const std::string& path)> file;             // any other GET (decoded path)

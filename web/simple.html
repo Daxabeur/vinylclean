@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<title>vinylclean — VU</title>
+<!--
+  vinylclean "simple view" for the touchscreen of the box: two needle VU meters
+  and the single cleaning sensitivity slider. Read from disk on every load
+  (/usr/local/share/vinylclean/simple.html) like index.html. No external library.
+
+  VU meters: RMS level of each channel (after the phono preamp), sent 10 times
+  per second by the program. Sine reference: a sine wave whose peak is at
+  "0 VU = −18 dBFS" (adjustable in Advanced settings) reads 0 VU. Needle
+  ballistics of a real VU meter: second-order movement, 99 % of the reading in
+  300 ms, ≈ 1.5 % overshoot. Drawn on canvas, at most 30 frames per second,
+  nothing runs when the needles are at rest or the page is hidden.
+-->
+<style>
+  :root {
+    --pad: clamp(6px, 2.2vmin, 26px);
+    --gap: clamp(6px, 2vmin, 22px);
+    --thumb: clamp(64px, 13vmin, 104px);   /* ≥ 12 mm on a 7" 1024 × 600 screen */
+    --txt: #e9dcc0; --dim: #8d8370; --acc: #e8a84a; --track: #2a2620;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; color: var(--txt);
+    font: 16px/1.25 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: manipulation;
+    overscroll-behavior: none; }
+  .app { position: fixed; inset: 0; display: grid; padding: var(--pad); gap: var(--gap);
+    padding-left: max(var(--pad), env(safe-area-inset-left)); padding-right: max(var(--pad), env(safe-area-inset-right));
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-areas: "l r" "c c"; }
+  .vu { position: relative; min-width: 0; min-height: 0; }
+  .vu canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  /* The needle is a thin element turned by the compositor (transform only): the
+     two canvases (face, hood + glass) are drawn once, never at each frame. */
+  .nclip { position: absolute; overflow: hidden; }
+  .ndl, .nsh { position: absolute; left: 0; bottom: 0; transform-origin: 50% 100%; will-change: transform; border-radius: 2px; }
+  .ndl { background: #0e0c0a; }
+  .nsh { background: rgba(60, 35, 10, .22); }
+  .led { position: absolute; border-radius: 50%; opacity: 0; transition: opacity 60ms linear; }
+  .led.pk { background: radial-gradient(circle at 40% 35%, #ffb09a, #ff3a22 55%, #c01808); box-shadow: 0 0 10px 3px rgba(255, 58, 34, .7); }
+  .led.ck { background: radial-gradient(circle at 40% 35%, #ffe6b0, #ffb43a 55%, #c07810); box-shadow: 0 0 10px 3px rgba(255, 180, 58, .6); }
+  .led.on { opacity: 1; transition: none; }
+  #vuL { grid-area: l; } #vuR { grid-area: r; }
+
+  /* Control strip: label + value, slider, Advanced button. */
+  .ctl { grid-area: c; display: grid; align-items: center; gap: 4px clamp(10px, 2.5vmin, 28px);
+    grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "h a" "s a"; min-width: 0; }
+  .ctl .hd { grid-area: h; display: flex; align-items: baseline; gap: 12px; padding: 0 calc(var(--thumb) / 2); min-width: 0; }
+  .ctl .hd b { font-size: clamp(13px, 2.9vmin, 22px); font-weight: 600; letter-spacing: .4px; color: var(--txt);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ctl .hd span { margin-left: auto; color: var(--acc); font-weight: 700; font-size: clamp(14px, 3.2vmin, 24px);
+    font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .side { grid-area: a; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .adv { min-width: 44px; min-height: 44px; padding: 0 clamp(10px, 2vmin, 18px); border-radius: 10px;
+    border: 1px solid #3a342b; background: #14120f; color: var(--dim); font: inherit;
+    font-size: clamp(13px, 2.5vmin, 17px); font-weight: 600; cursor: pointer; }
+  .adv:active { background: #2a2620; color: var(--txt); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #7a2a20; }
+  .dot.on { background: #4d8a5a; }
+
+  /* Slider (built by hand: the same on Chromium, WPE / cog and phones). */
+  .sl { grid-area: s; position: relative; height: var(--thumb); touch-action: none; cursor: pointer; outline: none; }
+  .sl .tr { position: absolute; left: calc(var(--thumb) / 2); right: calc(var(--thumb) / 2); top: 50%; height: 10px;
+    margin-top: -5px; border-radius: 5px; background: var(--track); }
+  .sl .fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 5px; background: linear-gradient(90deg, #6b4a1c, var(--acc)); }
+  .sl .nt { position: absolute; top: 50%; width: 2px; height: 22px; margin: -11px 0 0 -1px; background: #4a4236; }
+  .sl .nl { position: absolute; top: calc(50% + 14px); transform: translateX(-50%); font-size: clamp(11px, 2.2vmin, 15px);
+    color: var(--dim); font-variant-numeric: tabular-nums; }
+  .sl .th { position: absolute; top: 50%; left: 0; width: var(--thumb); height: var(--thumb); margin: calc(var(--thumb) / -2) 0 0 calc(var(--thumb) / -2);
+    border-radius: 50%; background: radial-gradient(circle at 38% 32%, #f6d99c, #d99a3e 55%, #8a5a1c);
+    box-shadow: 0 3px 10px rgba(0, 0, 0, .7), inset 0 -3px 6px rgba(0, 0, 0, .35); }
+  .sl .th::after { content: ""; position: absolute; left: 50%; top: 22%; bottom: 22%; width: 3px; margin-left: -1.5px;
+    border-radius: 2px; background: rgba(60, 35, 8, .55); }
+  .sl.custom .th { background: #2a2620; border: 3px solid var(--acc); }
+  .sl:focus-visible .th { outline: 2px solid #fff; outline-offset: 3px; }
+
+  /* Very wide bar (≥ 3:1, e.g. 1920 × 480): meters on the left, vertical slider on the right. */
+  @media (min-aspect-ratio: 3/1) {
+    .app { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; grid-template-rows: minmax(0, 1fr);
+      grid-template-areas: "l r c"; }
+    .ctl { grid-template-columns: auto auto; grid-template-rows: auto minmax(0, 1fr) auto;
+      grid-template-areas: "h h" "s n" "a a"; height: 100%; justify-items: center; }
+    .ctl .hd { flex-direction: column; align-items: center; gap: 2px; padding: 0; text-align: center; }
+    .ctl .hd b { white-space: normal; max-width: 9em; }
+    .ctl .hd span { margin: 0; }
+    .side { flex-direction: row; }
+    .sl { width: var(--thumb); height: 100%; }
+    .sl .tr { left: 50%; right: auto; width: 10px; margin: 0 0 0 -5px; top: calc(var(--thumb) / 2); bottom: calc(var(--thumb) / 2); height: auto; }
+    .sl .fill { top: auto; right: 0; }
+    .sl .nt { left: 50%; width: 22px; height: 2px; margin: -1px 0 0 -11px; }
+    .sl .nl { left: calc(50% + 16px); transform: translateY(-50%); }
+    .sl .th { left: 50%; top: 0; }
+  }
+  /* Portrait (phone): meters one above the other, slider at the bottom. */
+  @media (orientation: portrait) {
+    .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) auto;
+      grid-template-areas: "l" "r" "c"; }
+    .ctl { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "h a" "s s"; }
+    .ctl .hd { padding: 0 4px; }
+    .side { flex-direction: row-reverse; }
+  }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <div class="vu" id="vuL"><canvas></canvas><div class="nclip"><i class="nsh"></i><i class="ndl"></i></div><i class="led pk"></i><i class="led ck"></i><canvas></canvas></div>
+  <div class="vu" id="vuR"><canvas></canvas><div class="nclip"><i class="nsh"></i><i class="ndl"></i></div><i class="led pk"></i><i class="led ck"></i><canvas></canvas></div>
+  <div class="ctl">
+    <div class="hd"><b id="lbl"></b><span id="val">–</span></div>
+    <div class="sl" id="sl" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="5">
+      <div class="tr"><div class="fill" id="fill"></div></div>
+      <div class="th" id="th"></div>
+    </div>
+    <div class="side"><button class="adv" id="adv"></button><span class="dot" id="dot"></span></div>
+  </div>
+</div>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const T = {
+  en: { lbl: "Cleaning sensitivity", adv: "Advanced", off: "Off", custom: "custom", peak: "PEAK", click: "CLICK" },
+  fr: { lbl: "Sensibilité du nettoyage", adv: "Avancé", off: "Arrêt", custom: "perso", peak: "CRÊTE", click: "CLIC" }
+};
+let LANG = "en";
+try { const l = localStorage.getItem("vc.lang"); LANG = l && T[l] ? l : /^fr\b/i.test(navigator.language || "") ? "fr" : "en"; } catch (e) {}
+const t = k => T[LANG][k];
+$("lbl").textContent = t("lbl"); $("adv").textContent = t("adv"); document.documentElement.lang = LANG;
+$("adv").addEventListener("click", () => { location.href = "/index.html?mode=pages"; });
+
+// No zoom, no long-press menu, no text selection (touchscreen).
+document.addEventListener("contextmenu", e => e.preventDefault());
+document.addEventListener("gesturestart", e => e.preventDefault());
+document.addEventListener("dblclick", e => e.preventDefault());
+
+// ---------------------------------------------------------------- VU meters
+// Scale of a real VU meter: deflection proportional to the voltage, −20 VU at
+// the left end, +3 VU at the right end.
+const VMIN = Math.pow(10, -20 / 20), VMAX = Math.pow(10, 3 / 20);
+const pos = vu => (Math.pow(10, vu / 20) - VMIN) / (VMAX - VMIN);    // 0 … 1
+const SWEEP = 44 * Math.PI / 180;                                        // ± half sweep angle
+const ZETA = 0.8, WN = 13.1;   // 99 % in 300 ms, 1.5 % overshoot (see the header)
+
+function Meter(box, name) {
+  // Three stacked canvases: face (drawn once), needle and lights (each frame), hood and glass (drawn once).
+  const cv = box.querySelectorAll("canvas");
+  this.box = box; this.cvU = cv[0]; this.cvO = cv[1];
+  this.clip = box.querySelector(".nclip"); this.ndl = box.querySelector(".ndl"); this.nsh = box.querySelector(".nsh");
+  this.ledP = box.querySelector(".led.pk"); this.ledC = box.querySelector(".led.ck");
+  this.name = name;
+  this.x = 0; this.v = 0;            // needle position (0 … 1 of the scale, can go slightly past) and speed
+  this.target = 0;                   // reading asked by the signal
+  this.peakUntil = 0; this.clickUntil = 0;
+  this.under = null; this.over = null; this.g = null;
+}
+Meter.prototype.layout = function () {
+  const bb = this.box.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
+  const cw = Math.max(1, Math.round(bb.width * dpr)), ch = Math.max(1, Math.round(bb.height * dpr));
+  for (const c of [this.cvU, this.cvO]) { c.width = cw; c.height = ch; }
+  // Face: as large as possible, centred, aspect ratio between 1.35 and 1.75 (real meters ≈ 1.5).
+  const k = Math.max(1.35, Math.min(1.75, cw / ch));
+  let W = cw, H = W / k;
+  if (H > ch) { H = ch; W = H * k; }
+  const g = { W, H, x0: (cw - W) / 2, y0: (ch - H) / 2, bz: Math.max(3, H * 0.045) };
+  g.fx = g.x0 + g.bz; g.fy = g.y0 + g.bz; g.fw = W - 2 * g.bz; g.fh = H - 2 * g.bz;
+  // u: size unit of the scale (a face 1.55 times wider than high); a taller face only gets more room on top.
+  g.u = Math.min(g.fh, g.fw / 1.55);
+  const bot = g.fy + g.fh;
+  g.px = g.fx + g.fw / 2; g.py = bot + g.u * 0.2; g.R = g.u * 0.86;   // pivot below the face, scale radius
+  g.hood = bot - g.u * 0.16;
+  this.g = g;
+  this.drawUnder(this.cvU); this.drawOver(this.cvO);
+  // Needle and lights in CSS pixels.
+  const q = 1 / dpr, px = v => (v * q).toFixed(2) + "px";
+  Object.assign(this.clip.style, {left: px(g.fx), top: px(g.fy), width: px(g.fw), height: px(g.fh)});
+  const len = g.R + g.u * 0.1;   // pivot → tip
+  const w = Math.max(1.2, g.u * 0.0085) * q, ws = Math.max(1.5, g.u * 0.011) * q;
+  const base = (g.py - g.fy) * q;                                 // pivot, from the top of the clip
+  for (const [el, wd, dx] of [[this.ndl, w, 0], [this.nsh, ws, g.u * 0.012 * q]]) {
+    Object.assign(el.style, {width: wd.toFixed(2) + "px", height: (len * q).toFixed(2) + "px",
+      left: ((g.px - g.fx) * q - wd / 2 + dx).toFixed(2) + "px", top: (base - len * q).toFixed(2) + "px", bottom: "auto"});
+  }
+  this.shDy = g.u * 0.02 * q; this.lenPx = len * q; this.drawn = undefined;
+  const r = g.u * 0.032 * q;
+  for (const [el, cx] of [[this.ledP, 0.9], [this.ledC, 0.1]])
+    Object.assign(el.style, {width: (2 * r).toFixed(2) + "px", height: (2 * r).toFixed(2) + "px",
+      left: ((g.fx + g.fw * cx) * q - r).toFixed(2) + "px", top: ((g.fy + g.u * 0.11) * q - r).toFixed(2) + "px"});
+};
+Meter.prototype.ang = function (p) { return -SWEEP + 2 * SWEEP * p; };
+Meter.prototype.pt = function (a, r) { const g = this.g; return [g.px + r * Math.sin(a), g.py - r * Math.cos(a)]; };
+Meter.prototype.drawUnder = function (c) {
+  const g = this.g, x = c.getContext("2d");
+  // Bezel and face.
+  const rr = (X, Y, w, h, r) => { x.beginPath(); x.moveTo(X + r, Y); x.arcTo(X + w, Y, X + w, Y + h, r); x.arcTo(X + w, Y + h, X, Y + h, r);
+    x.arcTo(X, Y + h, X, Y, r); x.arcTo(X, Y, X + w, Y, r); x.closePath(); };
+  rr(g.x0, g.y0, g.W, g.H, g.H * 0.05);
+  const bez = x.createLinearGradient(0, g.y0, 0, g.y0 + g.H); bez.addColorStop(0, "#3a3732"); bez.addColorStop(1, "#121110");
+  x.fillStyle = bez; x.fill();
+  rr(g.fx, g.fy, g.fw, g.fh, g.H * 0.025);
+  const lit = x.createRadialGradient(g.px, g.py - g.R * 0.9, g.u * 0.05, g.px, g.py - g.R * 0.8, g.fw * 0.62);
+  lit.addColorStop(0, "#fff3cf"); lit.addColorStop(0.45, "#f6dea0"); lit.addColorStop(0.85, "#dcb262"); lit.addColorStop(1, "#b98a3e");
+  x.fillStyle = lit; x.fill();
+  x.save(); x.clip();
+  // Scale: thin black arc −20 … 0, thick red band 0 … +3.
+  const a0 = this.ang(0), aZ = this.ang(pos(0)), a1 = this.ang(1);
+  const arc = (r, from, to) => { x.beginPath(); x.arc(g.px, g.py, r, from - Math.PI / 2, to - Math.PI / 2); };
+  x.lineCap = "butt";
+  x.strokeStyle = "#1b1610"; x.lineWidth = Math.max(1, g.u * 0.008); arc(g.R, a0, aZ); x.stroke();
+  x.strokeStyle = "#c8281c"; x.lineWidth = g.u * 0.035; arc(g.R + g.u * 0.0175, aZ, a1); x.stroke();
+  x.strokeStyle = "#1b1610"; x.lineWidth = Math.max(1, g.u * 0.008); arc(g.R, aZ, a1); x.stroke();
+  // Ticks and numbers.
+  const fs = g.u * 0.085;
+  x.font = "600 " + fs + "px Georgia, 'Times New Roman', serif"; x.textAlign = "center"; x.textBaseline = "middle";
+  for (const v of [-20, -10, -7, -5, -3, -2, -1, 0, 1, 2, 3]) {
+    const a = this.ang(pos(v)), red = v > 0;
+    const [ax, ay] = this.pt(a, g.R), [bx, by] = this.pt(a, g.R + g.u * (v === 0 ? 0.085 : 0.06));
+    x.strokeStyle = red ? "#a81e14" : "#1b1610"; x.lineWidth = Math.max(1, g.u * (v === 0 ? 0.012 : 0.009));
+    x.beginPath(); x.moveTo(ax, ay); x.lineTo(bx, by); x.stroke();
+    const [tx, ty] = this.pt(a, g.R + g.u * 0.14);
+    x.fillStyle = red ? "#b2201a" : "#1b1610";
+    x.fillText(String(Math.abs(v)), tx, ty);
+  }
+  // Minor ticks between −10 and −7, and halves around 0.
+  for (const v of [-15, -8.5, -6, -4, -2.5, -1.5, -0.5, 0.5, 1.5, 2.5]) {
+    const a = this.ang(pos(v)), [ax, ay] = this.pt(a, g.R), [bx, by] = this.pt(a, g.R + g.u * 0.03);
+    x.strokeStyle = v > 0 ? "#a81e14" : "#3a2f20"; x.lineWidth = Math.max(1, g.u * 0.006);
+    x.beginPath(); x.moveTo(ax, ay); x.lineTo(bx, by); x.stroke();
+  }
+  // Percent scale under the arc (as on real meters, in small type).
+  x.font = "500 " + fs * 0.62 + "px system-ui, sans-serif"; x.fillStyle = "#4a3c26";
+  for (const p of [20, 40, 60, 80, 100]) {
+    const a = this.ang((p / 100 - VMIN) / (VMAX - VMIN));    // 100 % = 0 VU, linear in voltage
+    const [ax, ay] = this.pt(a, g.R - g.u * 0.005), [bx, by] = this.pt(a, g.R - g.u * 0.035);
+    x.strokeStyle = "#4a3c26"; x.lineWidth = Math.max(1, g.u * 0.005);
+    x.beginPath(); x.moveTo(ax, ay); x.lineTo(bx, by); x.stroke();
+    const [tx, ty] = this.pt(a, g.R - g.u * 0.075); x.fillText(String(p), tx, ty);
+  }
+  // "VU" and channel name.
+  const bot = g.fy + g.fh;
+  x.fillStyle = "#1b1610"; x.font = "700 " + g.u * 0.15 + "px Georgia, 'Times New Roman', serif";
+  x.fillText("VU", g.px, bot - g.u * 0.34);
+  x.font = "700 " + g.u * 0.1 + "px Georgia, serif"; x.fillStyle = "#3a2f20";
+  x.fillText(this.name, g.fx + g.fw * 0.1, bot - g.u * 0.28);
+  // Light sockets (the lights themselves are elements above, shown when lit).
+  for (const [cx, off] of [[0.9, "#4a1a12"], [0.1, "#4a3414"]]) {
+    const r = g.u * 0.032, X = g.fx + g.fw * cx, Y = g.fy + g.u * 0.11;
+    x.beginPath(); x.arc(X, Y, r * 1.35, 0, 2 * Math.PI); x.fillStyle = "#2a2219"; x.fill();
+    x.beginPath(); x.arc(X, Y, r, 0, 2 * Math.PI); x.fillStyle = off; x.fill();
+  }
+  x.restore();
+  return c;
+};
+Meter.prototype.drawOver = function (c) {
+  const g = this.g, x = c.getContext("2d");
+  x.save(); x.beginPath(); x.rect(g.fx, g.fy, g.fw, g.fh); x.clip();
+  // Hood that hides the bottom of the needle (curved top edge).
+  const hood = x.createLinearGradient(0, g.hood, 0, g.fy + g.fh);
+  hood.addColorStop(0, "#2c2822"); hood.addColorStop(1, "#0d0c0a");
+  x.fillStyle = hood; x.beginPath();
+  x.moveTo(g.fx, g.fy + g.fh); x.lineTo(g.fx, g.hood + g.u * 0.06);
+  x.quadraticCurveTo(g.px, g.hood - g.u * 0.05, g.fx + g.fw, g.hood + g.u * 0.06);
+  x.lineTo(g.fx + g.fw, g.fy + g.fh); x.closePath(); x.fill();
+  // LED labels.
+  x.font = "600 " + g.u * 0.045 + "px system-ui, sans-serif"; x.textAlign = "center"; x.textBaseline = "top";
+  x.fillStyle = "#5a4a30";
+  x.fillText(t("peak"), g.fx + g.fw * 0.9, g.fy + g.u * 0.17);
+  x.fillText(t("click"), g.fx + g.fw * 0.1, g.fy + g.u * 0.17);
+  // Glass: soft reflection on the top half and inner shadow.
+  const gl = x.createLinearGradient(0, g.fy, 0, g.fy + g.fh * 0.5);
+  gl.addColorStop(0, "rgba(255,255,255,0.16)"); gl.addColorStop(1, "rgba(255,255,255,0)");
+  x.fillStyle = gl; x.fillRect(g.fx, g.fy, g.fw, g.fh * 0.5);
+  x.restore();
+  x.strokeStyle = "rgba(0,0,0,0.55)"; x.lineWidth = Math.max(2, g.bz * 0.5);
+  x.strokeRect(g.fx + x.lineWidth / 2, g.fy + x.lineWidth / 2, g.fw - x.lineWidth, g.fh - x.lineWidth);
+  return c;
+};
+// Moves the needle (dt in s). Returns true while it is still moving.
+Meter.prototype.step = function (dt) {
+  const n = Math.max(1, Math.ceil(dt / 0.004)), h = dt / n;
+  for (let i = 0; i < n; ++i) {
+    this.v += (WN * WN * (this.target - this.x) - 2 * ZETA * WN * this.v) * h;
+    this.x += this.v * h;
+    // Mechanical stops.
+    if (this.x < -0.025) { this.x = -0.025; if (this.v < 0) this.v = 0; }
+    if (this.x > 1.06) { this.x = 1.06; if (this.v > 0) this.v = 0; }
+  }
+  if (Math.abs(this.v) < 1e-4 && Math.abs(this.target - this.x) < 1e-4) { this.x = this.target; this.v = 0; return false; }
+  return true;
+};
+Meter.prototype.draw = function (now) {
+  if (!this.g) return;
+  // Touch the style only if the tip moves by at least 0.25 pixel (no new frame otherwise).
+  const ang = this.ang(this.x);
+  if (this.drawn === undefined || Math.abs(ang - this.drawn) * this.lenPx >= 0.25) {
+    this.drawn = ang;
+    const a = ang.toFixed(4);
+    this.ndl.style.transform = "rotate(" + a + "rad)";
+    this.nsh.style.transform = "translateY(" + this.shDy.toFixed(2) + "px) rotate(" + a + "rad)";
+  }
+  this.ledP.classList.toggle("on", now < this.peakUntil);
+  this.ledC.classList.toggle("on", now < this.clickUntil);
+};
+
+const meters = [new Meter($("vuL"), "L"), new Meter($("vuR"), "R")];
+
+// ---------------------------------------------------------------- animation loop (≤ 30 frames/s)
+let raf = 0, lastFrame = 0, lastStep = 0;
+function frame(now) {
+  raf = 0;
+  if (document.hidden) return;
+  if (now - lastFrame < 30) { raf = requestAnimationFrame(frame); return; }   // ≈ 30 frames/s
+  const dt = Math.min(0.1, lastStep ? (now - lastStep) / 1000 : 0.033);
+  lastStep = now; lastFrame = now;
+  let busy = false;
+  for (const m of meters) { if (m.step(dt)) busy = true; m.draw(now); if (now < m.peakUntil || now < m.clickUntil) busy = true; }
+  for (const m of meters) m.lit = now < m.peakUntil || now < m.clickUntil;
+  if (busy) raf = requestAnimationFrame(frame);
+  else lastStep = 0;
+}
+function wake() { if (!raf && !document.hidden) raf = requestAnimationFrame(frame); }
+document.addEventListener("visibilitychange", () => { lastStep = 0; if (!document.hidden) { for (const m of meters) m.draw(performance.now()); wake(); } });
+function relayout() { for (const m of meters) { m.layout(); m.draw(performance.now()); } slider.layout(); }
+let rzTimer = 0;
+window.addEventListener("resize", () => { clearTimeout(rzTimer); rzTimer = setTimeout(relayout, 60); });
+
+// ---------------------------------------------------------------- slider 0 … 5 (single sensitivity)
+const slider = {
+  el: $("sl"), th: $("th"), fill: $("fill"), val: 3, custom: false, vert: false, drag: false,
+  layout() {
+    this.vert = matchMedia("(min-aspect-ratio: 3/1)").matches;
+    // Notches 0 … 5 with numbers.
+    for (const n of this.el.querySelectorAll(".nt, .nl")) n.remove();
+    for (let i = 0; i <= 5; ++i) {
+      const nt = document.createElement("div"), nl = document.createElement("div");
+      nt.className = "nt"; nl.className = "nl"; nl.textContent = i;
+      this.el.insertBefore(nt, this.th); this.el.insertBefore(nl, this.th);
+      nt.dataset.i = nl.dataset.i = i;
+    }
+    this.render();
+  },
+  frac(i) { return i / 5; },
+  render() {
+    const f = this.frac(this.val), th = this.th.offsetWidth, el = this.el;
+    for (const n of el.querySelectorAll(".nt, .nl")) {
+      const p = th / 2 + this.frac(+n.dataset.i) * ((this.vert ? el.clientHeight : el.clientWidth) - th);
+      if (this.vert) { n.style.top = (el.clientHeight - p) + "px"; n.style.left = ""; }
+      else { n.style.left = p + "px"; n.style.top = ""; }
+    }
+    if (this.vert) {
+      const p = th / 2 + f * (el.clientHeight - th);
+      this.th.style.top = (el.clientHeight - p) + "px"; this.th.style.left = "";
+      this.fill.style.height = (f * 100) + "%"; this.fill.style.width = "";
+    } else {
+      const p = th / 2 + f * (el.clientWidth - th);
+      this.th.style.left = p + "px"; this.th.style.top = "";
+      this.fill.style.width = (f * 100) + "%"; this.fill.style.height = "";
+    }
+    el.classList.toggle("custom", this.custom);
+    el.setAttribute("aria-valuenow", this.val);
+    $("val").textContent = this.custom ? t("custom") : this.val === 0 ? t("off") : String(this.val);
+  },
+  fromPointer(e) {
+    const r = this.el.getBoundingClientRect(), th = this.th.offsetWidth;
+    const f = this.vert ? (r.bottom - th / 2 - e.clientY) / (r.height - th) : (e.clientX - r.left - th / 2) / (r.width - th);
+    return Math.max(0, Math.min(5, Math.round(f * 5)));
+  },
+  set(v, user) {
+    if (v === this.val && !this.custom) return;
+    this.val = v; this.custom = false; this.render();
+    if (user) send({cmd: "set", sens: v});
+  }
+};
+slider.el.addEventListener("pointerdown", e => { slider.drag = true; slider.el.setPointerCapture(e.pointerId); slider.set(slider.fromPointer(e), true); e.preventDefault(); });
+slider.el.addEventListener("pointermove", e => { if (slider.drag) slider.set(slider.fromPointer(e), true); });
+for (const ev of ["pointerup", "pointercancel", "lostpointercapture"]) slider.el.addEventListener(ev, () => { slider.drag = false; });
+slider.el.addEventListener("keydown", e => {
+  const d = {ArrowRight: 1, ArrowUp: 1, ArrowLeft: -1, ArrowDown: -1}[e.key];
+  if (d) { slider.set(Math.max(0, Math.min(5, slider.val + d)), true); e.preventDefault(); }
+});
+
+// ---------------------------------------------------------------- connection
+let ws = null, vuRef = -18, clicks = null;
+function send(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
+function connect() {
+  ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
+  ws.onopen = () => $("dot").classList.add("on");
+  ws.onclose = () => {
+    $("dot").classList.remove("on");
+    for (const m of meters) m.target = 0;   // needles back to rest
+    wake();
+    setTimeout(connect, 1500);
+  };
+  ws.onmessage = ev => {
+    let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+    if (m.type === "settings") {
+      if (typeof m.vuRef === "number") vuRef = m.vuRef;
+      if (!slider.drag) {
+        if (m.sens >= 0) { slider.val = m.sens; slider.custom = false; }
+        else { slider.custom = true; if (m.sensDeclick >= 0) slider.val = m.sensDeclick; }
+        slider.render();
+      }
+    } else if (m.type === "status") {
+      if (document.hidden) return;
+      const now = performance.now();
+      const ch = [[m.vuL, m.inL, m.outL], [m.vuR, m.inR, m.outR]];
+      for (let i = 0; i < 2; ++i) {
+        const [rms, pin, pout] = ch[i], M = meters[i];
+        // Sine reference: RMS + 3.01 dB = peak of the equivalent sine; 0 VU at vuRef dBFS.
+        M.target = m.running && typeof rms === "number" && rms > -119 ? Math.max(-0.025, pos(rms + 3.01 - vuRef)) : 0;
+        if (m.running && Math.max(pin ?? -120, pout ?? -120) > -1) M.peakUntil = now + 1500;
+      }
+      if (clicks !== null && m.clicks > clicks) for (const M of meters) M.clickUntil = now + 120;
+      clicks = m.clicks;
+      // Draw only if a needle has to move or a light changes.
+      if (meters.some(M => Math.abs(M.target - M.x) > 1e-4 || M.v !== 0 || now < M.peakUntil || now < M.clickUntil || M.lit)) wake();
+    }
+  };
+}
+relayout();
+connect();
+</script>
+</body>
+</html>

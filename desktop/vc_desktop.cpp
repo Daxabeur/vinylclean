@@ -26,6 +26,7 @@
 
 #include "index_html.h"
 #include "extra_html.h"
+#include "simple_html.h"
 
 #include <FLAC/stream_encoder.h>
 
@@ -94,6 +95,7 @@ struct Settings {
     float phonoGainDb = 12.f;
     bool rumble = true;
     bool recClean = false;
+    float vuRef = -18.f;           // VU meters of the touchscreen page: dBFS that reads 0 VU
     bool adOn = false, adAutoPos = true;
     float armLen = 222.f, null1 = 60.325f, null2 = 117.42f, stylusUm = 7.6f;
     float posMm = 100.f, sideMin = 20.f, adInt = 1.f;
@@ -110,11 +112,11 @@ static std::string settingsToJson(const Settings& s) {
     char b[2048];
     std::snprintf(b, sizeof b,
                   "{\"scale\":3,\"ad\":%d,\"armLen\":%g,\"align\":%d,\"null1\":%g,\"null2\":%g,\"stylus\":%d,\"stylusUm\":%g,\"disc\":%d,\"autoPos\":%d,\"posMm\":%g,\"sideMin\":%g,\"adInt\":%g,"
-                  "\"sens\":%d,\"sensDeclick\":%d,\"sensDecrackle\":%d,\"declick\":%g,\"decrackle\":%g,\"protect\":%d,\"maxclick\":%g,\"multiband\":%d,\"stereo\":%d,\"riaa\":%d,\"phonoGain\":%g,\"rumble\":%d,\"recClean\":%d,\"mode\":%d,"
+                  "\"sens\":%d,\"sensDeclick\":%d,\"sensDecrackle\":%d,\"declick\":%g,\"decrackle\":%g,\"protect\":%d,\"maxclick\":%g,\"multiband\":%d,\"stereo\":%d,\"riaa\":%d,\"phonoGain\":%g,\"rumble\":%d,\"recClean\":%d,\"vuRef\":%g,\"mode\":%d,"
                   "\"in\":\"%s\",\"out\":\"%s\",\"rate\":%u,\"periods\":%d}",
                   s.adOn ? 1 : 0, s.armLen, s.align, s.null1, s.null2, s.stylus, s.stylusUm, s.disc, s.adAutoPos ? 1 : 0, s.posMm, s.sideMin, s.adInt,
                   commonSens(s), declickSensForIntensity(s.declick), decrackleSensForIntensity(s.decrackle), s.declick, s.decrackle, s.protect, s.maxClick,
-                  s.multiband ? 1 : 0, s.stereo ? 1 : 0, s.riaa ? 1 : 0, s.phonoGainDb, s.rumble ? 1 : 0, s.recClean ? 1 : 0, s.mode,
+                  s.multiband ? 1 : 0, s.stereo ? 1 : 0, s.riaa ? 1 : 0, s.phonoGainDb, s.rumble ? 1 : 0, s.recClean ? 1 : 0, s.vuRef, s.mode,
                   jsonEscape(s.inDev).c_str(), jsonEscape(s.outDev).c_str(), s.rate, s.periods);
     return b;
 }
@@ -133,6 +135,7 @@ static void settingsFromJson(const JsonFlat& j, Settings& s) {
     if (j.has("phonoGain")) s.phonoGainDb = clampf(j.num("phonoGain"), 0, 40);
     if (j.has("rumble")) s.rumble = j.num("rumble") != 0;
     if (j.has("recClean")) s.recClean = j.num("recClean") != 0;
+    if (j.has("vuRef")) s.vuRef = float(std::fmin(-8, std::fmax(-24, j.num("vuRef"))));
     if (j.has("ad")) s.adOn = j.num("ad") != 0;
     if (j.has("armLen")) s.armLen = clampf(j.num("armLen"), 150, 400);
     if (j.has("align")) s.align = int(clampf(j.num("align"), 0, 3));
@@ -689,6 +692,7 @@ int main(int argc, char** argv) {
     }();
     vcd::HttpServer::Callbacks cb;
     cb.page = [&] { return page; };
+    cb.simplePage = [] { return std::string(kSimpleHtml); };
     cb.onConnect = [&]() { wantCards = true; wantRecs = true; wantFile = true; return std::vector<std::string>{stateJson(), fileJson()}; };
     cb.onMessage = [&](const std::string& m) -> std::string {
         JsonFlat j;
@@ -1009,6 +1013,8 @@ int main(int argc, char** argv) {
             auto num = [](double v, const char* f) { char t[32]; if (std::isfinite(v)) std::snprintf(t, sizeof t, f, v); else std::snprintf(t, sizeof t, "null"); return std::string(t); };
             full.insert(full.size() - 1, ",\"bal\":" + num(levels.balanceDb, "%.1f") + ",\"corr\":" + num(levels.correlation, "%.2f") +
                                          ",\"noise\":" + num(levels.noiseDb, "%.0f") + ",\"recClean\":" + (sh.recClean ? "true" : "false"));
+                double vl, vr; levels.takeVu(vl, vr);
+                full.insert(full.size() - 1, ",\"vuL\":" + num(vl, "%.1f") + ",\"vuR\":" + num(vr, "%.1f"));
             full.insert(full.size() - 1, ",\"recName\":\"" + jsonEscape(rec.recording() ? recName : std::string()) + "\",\"recMsg\":\"" + jsonEscape(msg) + "\"");
             web.broadcast(full);
         }

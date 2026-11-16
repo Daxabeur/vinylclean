@@ -97,11 +97,11 @@ vc-bench --rate 48000 --seconds 10
 - **Enregistrement** : nom du fichier, son **brut ou nettoyé**, enregistrer / arrêter, liste des enregistrements avec téléchargement et suppression.
 - **Anti-distorsion** : réglages de la platine et de la cellule, courbe de l'erreur d'angle.
 - **Paramètres avancés** : sensibilités séparées du déclick et du dé-crackle, intensités fines, longueur max d'un
-  clic, multibande / pleine bande, canaux liés / séparés.
+  clic, multibande / pleine bande, canaux liés / séparés, référence des VU-mètres.
 - **Carte son et qualité** : entrée, sortie et fréquence d'échantillonnage parmi ce que les cartes acceptent
   vraiment, avec la charge estimée. Changer de carte ou de fréquence coupe le son environ 1 seconde ; si la nouvelle
   configuration échoue, l'ancienne est rétablie toute seule.
-- Bouton **EN / FR** dans la barre du haut (le choix est retenu par le navigateur).
+- Bouton **EN / FR** dans la barre du haut (le choix est retenu par le navigateur), bouton **VU-mètres** (vue simple, voir *Écran tactile*).
 
 Tous les écrans ouverts restent **synchronisés**. Les réglages sont sauvegardés dans
 `~/.config/vinylclean/settings.json` et rechargés au démarrage.
@@ -146,6 +146,7 @@ Le curseur **Clics et craquements** règle le déclick et le dé-crackle ensembl
 - **Longueur max d'un clic** (0,5 à 5 ms, défaut 2,5 ms).
 - **Réparation** : Multibande (défaut) ou Pleine bande.
 - **Stéréo** : Canaux liés (défaut) ou Canaux séparés.
+- **Référence des VU-mètres** (−24 à −8 dBFS, défaut −18) : niveau qui met les aiguilles de la vue simple sur 0 VU.
 
 ### Niveaux
 
@@ -304,17 +305,39 @@ la musique domine (souvent les graves) : la musique n'est pas réinventée inuti
 
 ## Écran tactile
 
-Écran officiel Raspberry Pi (DSI), ou écran HDMI avec tactile USB. Après l'installation ci-dessus :
+Écran officiel Raspberry Pi (DSI), ou écran HDMI avec tactile USB (par exemple un écran capacitif 7" 1024 × 600 :
+image par le HDMI, tactile par le câble USB, sans pilote). Après l'installation ci-dessus :
 
 ```bash
 cd ~/vinylclean
 ./scripts/kiosk-install.sh
 ```
 
-L'écran affiche la même page en plein écran, en deux colonnes sur un écran 800 × 480. Navigateur léger « cog »
-(WPE WebKit) dans « cage », sans bureau ; Chromium si cog n'est pas disponible. L'écran tourne en priorité basse : il
-ne peut pas gêner le son, qui garde sa priorité temps réel.
+L'écran ouvre la **vue simple** (`simple.html`) : deux **VU-mètres à aiguille** (gauche / droite) façon hi-fi
+des années 70, le curseur **Sensibilité du nettoyage** et un bouton **Avancé**.
 
+- VU-mètres : niveau efficace (RMS) du signal de la platine, balistique d'un vrai VU-mètre (99 % de la lecture en
+  300 ms). **0 VU = −18 dBFS** (référence sinus), réglable dans *Paramètres avancés → Référence des VU-mètres*.
+  Voyant rouge : une crête au-dessus de −1 dBFS. Voyant ambré : clignote à chaque clic réparé.
+- Le curseur est le même réglage que sur la page complète : tous les écrans restent synchronisés.
+- **Avancé** ouvre tous les réglages **une page par groupe**, sans aucun défilement : flèches ◀ ▶, glissé du
+  doigt, points en bas, bouton **Vue simple** en haut. Un groupe qui ne tient pas sur la hauteur de l'écran est
+  découpé automatiquement en plusieurs pages.
+- Sur le téléphone, le bouton **VU-mètres** en haut de la page complète ouvre la vue simple.
+
+La page s'adapte à l'écran : 1024 × 600 et 800 × 480 (VU-mètres côte à côte), barres très larges comme
+1920 × 480 (curseur vertical à droite), téléphone en portrait (VU-mètres l'un au-dessus de l'autre). Navigateur
+léger « cog » (WPE WebKit) dans « cage », sans bureau ; Chromium si cog n'est pas disponible. L'écran tourne en
+priorité basse : il ne peut pas gêner le son, qui garde sa priorité temps réel. Les aiguilles sont dessinées au
+plus 30 fois par seconde, et plus rien n'est dessiné quand elles ne bougent pas.
+
+- **Écran HDMI pas affiché en 1024 × 600** (image trop petite, floue ou coupée) : force sa résolution, puis redémarre.
+  ```bash
+  ./scripts/kiosk-install.sh --resolution 1024x600
+  sudo reboot
+  ```
+  Ça ajoute `video=HDMI-A-1:1024x600@60` au début de l'unique ligne de `/boot/firmware/cmdline.txt`
+  (une copie de sauvegarde est gardée à côté).
 - Enlever l'écran : `./scripts/kiosk-install.sh --remove` (le son continue).
 - Image à l'envers (écran officiel) : ajouter `display_lcd_rotate=2` ou, avec le pilote KMS,
   `video=DSI-1:800x480@60,rotate=180` à la fin de `/boot/firmware/cmdline.txt`, puis redémarrer.
@@ -431,7 +454,7 @@ Le code (commentaires, messages, options) est en anglais ; la page de réglage e
 ```
 core/       DSP : ar, lsar, declick, decrackle (+ chaîne), antidist (anti-distorsion), riaa.h, presets.h
 tools/      vc_live.cpp, web_server.*, sha1.h, loudness.h, recorder.h, vc_file.cpp, vc_bench.cpp, wav.h, offline.h
-web/        index.html (page de réglage, anglais / français)
+web/        index.html (page de réglage, anglais / français), simple.html (écran tactile : VU-mètres)
 desktop/    version Windows / Linux (vc_desktop.cpp, http_server.*, extra.html, build.sh, packaging/)
 tests/      test_declick.cpp, test_decrackle.cpp, test_loudness.cpp, test_recorder.cpp, test_riaa.cpp, test_antidist.cpp, synth.h
 scripts/    install.sh, kiosk-install.sh, services systemd, options par défaut
