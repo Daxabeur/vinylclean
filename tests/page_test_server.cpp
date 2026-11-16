@@ -107,14 +107,14 @@ int main(int argc, char** argv) {
         if (now - lastList >= std::chrono::seconds(3)) {   // recordings and sound cards, like vc-live
             lastList = now;
             std::string r = "{\"type\":\"recs\",\"free\":21500000000,\"items\":[";
-            const char* names[] = {"Pink Floyd - Animals - Face A", "Pink Floyd - Animals - Face B", "Miles Davis - Kind of Blue - Face A",
-                                   "Miles Davis - Kind of Blue - Face B", "Daft Punk - Discovery - Face A", "Daft Punk - Discovery - Face B",
-                                   "Daft Punk - Discovery - Face C", "Bach - Suites - Face A", "Test 45 tours"};
+            const char* names[] = {"Artist 1 - Album - Side A", "Artist 1 - Album - Side B", "Artist 2 - Live record - Side A",
+                                   "Artist 2 - Live record - Side B", "Artist 3 - Double album - Side A", "Artist 3 - Double album - Side B",
+                                   "Artist 3 - Double album - Side C", "Artist 4 - Suites - Side A", "Test 45 rpm"};
             for (int i = 0; i < 9; ++i)
                 r += std::string(i ? "," : "") + "{\"name\":\"" + names[i] + ".flac\",\"sec\":" + std::to_string(1100 + 37 * i) +
                      ",\"bytes\":" + std::to_string(180000000 + 7000000 * i) + ",\"date\":\"2026-11-1" + std::to_string(i % 7) + " 21:0" + std::to_string(i) + "\",\"rec\":false}";
             web.broadcast(r + "]}");
-            web.broadcast("{\"type\":\"cards\",\"cards\":[{\"name\":\"Scarlett 2i2 USB\",\"dev\":\"hw:0,0\",\"in\":[44100,48000,88200,96000],"
+            web.broadcast("{\"type\":\"cards\",\"cards\":[{\"name\":\"USB sound card\",\"dev\":\"hw:0,0\",\"in\":[44100,48000,88200,96000],"
                           "\"out\":[44100,48000,88200,96000],\"format\":\"24 bits\"},{\"name\":\"bcm2835 Headphones\",\"dev\":\"hw:1,0\",\"in\":[],\"out\":[44100,48000],\"format\":\"16 bits\"}]}");
         }
         if (now - lastB >= std::chrono::milliseconds(100)) {
