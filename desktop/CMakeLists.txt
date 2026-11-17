@@ -5,7 +5,7 @@
 #   Windows:  same with -DCMAKE_TOOLCHAIN_FILE=desktop/packaging/mingw-w64.cmake (cross-compilation from Linux)
 #   See desktop/build.sh, which does everything (libFLAC included).
 cmake_minimum_required(VERSION 3.16)
-project(vinylclean_desktop VERSION 1.5.0 LANGUAGES C CXX)
+project(vinylclean_desktop VERSION 1.5.1 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

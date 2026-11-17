@@ -144,6 +144,9 @@
   .lang button.sel { background: var(--acc); color: #1a1408; border-color: var(--acc); }
   header .lang + .info { margin-left: 10px; }
   .grid2 label { display: block; font-weight: 600; margin-top: 10px; }
+  .help p { color: var(--dim); font-size: 14px; margin: 4px 0 8px; }
+  .help p b { color: var(--txt); font-weight: 600; }
+  .help .sub:first-child { margin-top: 10px; }
   .stats.side { grid-template-columns: repeat(4, 1fr); margin-top: 4px; }
   .stats b.good { color: var(--ok); } .stats b.bad { color: var(--bad); }
   /* Organizing the cards (▲ ▼): every card folds to its title. */
@@ -207,7 +210,6 @@
         <button data-v="0" data-i18n="prot.none"></button><button data-v="1" data-i18n="prot.normal"></button><button data-v="2" data-i18n="prot.max"></button>
       </div>
     </div>
-    <p class="note" data-i18n="sens.note"></p>
   </section>
 
   <section class="card" data-blk="levels" id="lvCard">
@@ -227,7 +229,6 @@
       <div><b id="sCorr">–</b><span data-i18n="levels.corr"></span></div>
       <div><b id="sNoise">–</b><span data-i18n="levels.noise"></span></div>
     </div>
-    <p class="note" data-i18n="levels.note"></p>
     <h3 class="sub" data-i18n="side.title"></h3>
     <div class="stats side">
       <div><b id="sDr">–</b><span data-i18n="side.dr"></span></div>
@@ -237,7 +238,6 @@
     </div>
     <p class="advice dim" id="sideAdvice"></p>
     <button class="btn small" id="sideNew" style="width:100%;margin-top:8px" data-i18n="side.new"></button>
-    <p class="note" data-i18n="side.note"></p>
     </details>
   </section>
 
@@ -279,7 +279,6 @@
         <div class="row">
           <label data-i18n="ad.armLen"></label>
           <input type="number" id="armLen" min="150" max="400" step="0.1" inputmode="decimal">
-          <p data-i18n="ad.armLen.s"></p>
         </div>
         <div class="row">
           <label data-i18n="ad.align"></label>
@@ -324,9 +323,7 @@
           <div><b id="gMount">–</b><span data-i18n="ad.mount"></span></div>
         </div>
         <svg class="terr" id="terr" viewBox="0 0 320 130"></svg>
-        <p class="note" data-i18n="ad.graph"></p>
       </details>
-      <p class="note" data-i18n="ad.note"></p>
     </div>
   </section>
 </div>
@@ -366,16 +363,13 @@
         <div class="seg" id="multiband" style="margin-top:6px">
           <button data-v="0" data-i18n="adv.fullband"></button><button data-v="1" data-i18n="adv.multiband"></button>
         </div>
-        <p class="hint" data-i18n="adv.repair.h"></p>
       </div>
       <div class="row">
         <label data-i18n="adv.stereo"></label>
         <div class="seg" id="stereo" style="margin-top:6px">
           <button data-v="0" data-i18n="adv.separate"></button><button data-v="1" data-i18n="adv.linked"></button>
         </div>
-        <p class="hint" data-i18n="adv.stereo.h"></p>
       </div>
-      <p class="note" data-i18n="adv.note"></p>
       <h3 class="sub" data-i18n="phono.title"></h3>
       <div class="seg" id="riaa">
         <button data-v="0"><span data-i18n="phono.ext"></span><small data-i18n="phono.ext.s"></small></button>
@@ -393,7 +387,6 @@
           </div>
         </div>
       </div>
-      <p class="note" id="riaaNote"></p>
     </details>
   </section>
 
@@ -443,6 +436,35 @@
       <div class="row"><label data-i18n="card.rate"></label><select id="rate"></select></div>
       <p class="note" id="cardNote"></p>
       <button class="btn" id="apply" data-i18n="card.apply"></button>
+    </details>
+  </section>
+
+  <section class="card" data-blk="help">
+    <details id="helpBox">
+      <summary data-i18n="help.title"></summary>
+      <div id="helpBody" class="help">
+        <h3 class="sub" data-i18n="sens.title"></h3>
+        <p data-i18n="sens.note"></p>
+        <h3 class="sub" data-i18n="levels.title"></h3>
+        <p data-i18n="levels.note"></p>
+        <h3 class="sub" data-i18n="side.title"></h3>
+        <p data-i18n="side.note"></p>
+        <h3 class="sub" data-i18n="ad.title"></h3>
+        <p data-i18n="ad.note"></p>
+        <p><b data-i18n="ad.armLen"></b> — <span data-i18n="ad.armLen.s"></span></p>
+        <p data-i18n="ad.graph"></p>
+        <h3 class="sub" data-i18n="adv.title"></h3>
+        <p data-i18n="adv.note"></p>
+        <p><b data-i18n="adv.repair"></b> — <span data-i18n="adv.repair.h"></span></p>
+        <p><b data-i18n="adv.stereo"></b> — <span data-i18n="adv.stereo.h"></span></p>
+        <h3 class="sub" data-i18n="phono.title"></h3>
+        <p><b data-i18n="phono.int"></b> — <span data-i18n="phono.note.on"></span></p>
+        <p data-i18n="phono.note.off"></p>
+        <h3 class="sub" data-i18n="rec.title"></h3>
+        <p><b data-i18n="rec.raw"></b> — <span data-i18n="rec.note"></span></p>
+        <p><b data-i18n="rec.clean"></b> — <span data-i18n="rec.note.clean"></span></p>
+        <p data-i18n="rec.help.fmt"></p>
+      </div>
     </details>
   </section>
 </div>
@@ -541,7 +563,7 @@ const I18N = {
     "side.a.great": "Very dynamic music (DR 14 and more): little or no compression.",
     "side.a.ok": "Moderate dynamics (DR 8 to 13): usual for most records.",
     "side.a.loud": "Strongly compressed music (DR 7 and less): \u201cloudness war\u201d mastering.",
-    "side.note": "Measured on the original sound (turntable after the phono preamp, before any cleaning), from the stylus drop to now. A new side starts by itself when the music comes back after 8 s with the arm raised. DR: published “DR” method (3 s blocks, second highest peak against the loudest 20 %). Loudness: ITU-R BS.1770. Clicks can raise the peaks a little.",
+    "side.note": "Measured on the original sound (turntable after the phono preamp, before any cleaning), from the stylus drop to now. A new side starts by itself when the stylus is dropped after 6 s with the arm raised (no surface noise in the treble; the hum of the raised arm is ignored), or with the “New side” button. DR: published “DR” method (3 s blocks, second highest peak against the loudest 20 %). Loudness: ITU-R BS.1770. Clicks can raise the peaks a little.",
     "rec.fmt": "File format", "rec.flac.s": "lossless, compressed", "rec.wav.s": "uncompressed", "rec.bits": "Bits", "rec.rate": "Sample rate",
     "rec.max": "Maximum ({0})", "rec.b16": "16 bits (CD, with dither)", "rec.b24": "24 bits", "rec.b32": "32 bits float",
     "rec.b32.flac": "32 bits float (WAV only)",
@@ -550,6 +572,9 @@ const I18N = {
     "rec.fmt.16": " 16 bits: smaller file, quality of a CD.", "rec.rate.note": " Changing the sample rate changes that of the card (≈ 1 s of silence).",
     "rec.rate.busy": "(not during a recording)",
     "org.btn": "⇅ Arrange", "org.help": "Move the cards with ▲ ▼ to put what you use most at the top. The order is kept for every screen.",
+    "help.title": "Help: what each setting does",
+    "rec.fmt.isMax": "(maximum)",
+    "rec.help.fmt": "Format: FLAC is lossless and compressed, WAV uncompressed. Bits: “Maximum” keeps everything — FLAC 24 bits (all that the sound card gives), WAV 32-bit float (every value exactly, even above 0 dBFS). 16 bits: quality of a CD, with dither so that quiet passages are not distorted. Sample rate: the recording is made at the rate of the card; choosing another one changes the card's (about 1 s of silence, not during a recording).",
     "org.default": "Default order", "org.done": "Done", "org.up": "Up", "org.down": "Down", "org.stats": "Counters", "file.title2": "Clean a file"
   },
   fr: {
@@ -634,7 +659,7 @@ const I18N = {
     "side.a.great": "Musique très dynamique (DR 14 et plus) : peu ou pas de compression.",
     "side.a.ok": "Dynamique moyenne (DR 8 à 13) : habituel pour la plupart des disques.",
     "side.a.loud": "Musique très compressée (DR 7 et moins) : mastering « loudness war ».",
-    "side.note": "Mesuré sur le son original (platine après le préampli phono, avant tout nettoyage), de la pose du diamant à maintenant. Une nouvelle face démarre toute seule quand la musique revient après 8 s de bras levé. DR : méthode « DR » publiée (blocs de 3 s, deuxième plus haute crête face aux 20 % les plus forts). Sonie : ITU-R BS.1770. Les clics peuvent un peu relever les crêtes.",
+    "side.note": "Mesuré sur le son original (platine après le préampli phono, avant tout nettoyage), de la pose du diamant à maintenant. Une nouvelle face démarre toute seule quand le diamant est reposé après 6 s de bras levé (plus de bruit de sillon dans les aigus ; le ronflement du bras levé est ignoré), ou avec le bouton « Nouvelle face ». DR : méthode « DR » publiée (blocs de 3 s, deuxième plus haute crête face aux 20 % les plus forts). Sonie : ITU-R BS.1770. Les clics peuvent un peu relever les crêtes.",
     "rec.fmt": "Format du fichier", "rec.flac.s": "sans perte, compressé", "rec.wav.s": "non compressé", "rec.bits": "Bits", "rec.rate": "Fréquence",
     "rec.max": "Maximum ({0})", "rec.b16": "16 bits (CD, avec dither)", "rec.b24": "24 bits", "rec.b32": "32 bits flottant",
     "rec.b32.flac": "32 bits flottant (WAV seulement)",
@@ -643,6 +668,9 @@ const I18N = {
     "rec.fmt.16": " 16 bits : fichier plus petit, qualité d'un CD.", "rec.rate.note": " Changer la fréquence change celle de la carte (≈ 1 s de silence).",
     "rec.rate.busy": "(pas pendant un enregistrement)",
     "org.btn": "⇅ Organiser", "org.help": "Déplace les cartes avec ▲ ▼ pour mettre en haut ce que tu utilises le plus. L'ordre est gardé pour tous les écrans.",
+    "help.title": "Aide : ce que fait chaque réglage",
+    "rec.fmt.isMax": "(maximum)",
+    "rec.help.fmt": "Format : le FLAC est sans perte et compressé, le WAV non compressé. Bits : « Maximum » garde tout — FLAC 24 bits (tout ce que donne la carte son), WAV 32 bits flottant (chaque valeur exactement, même au-dessus de 0 dBFS). 16 bits : qualité d'un CD, avec un dither pour que les passages calmes ne soient pas déformés. Fréquence : l'enregistrement se fait à la fréquence de la carte ; en choisir une autre change celle de la carte (environ 1 s de silence, pas pendant un enregistrement).",
     "org.default": "Ordre par défaut", "org.done": "Terminé", "org.up": "Monter", "org.down": "Descendre", "org.stats": "Compteurs", "file.title2": "Nettoyer un fichier"
   }
 };
@@ -703,7 +731,6 @@ function render() {
   if (S.mode === undefined) return;
   seg("riaa", S.riaa); seg("rumble", S.rumble);
   $("phonoBox").hidden = !S.riaa;
-  $("riaaNote").textContent = t(S.riaa ? "phono.note.on" : "phono.note.off");
   if (dragging !== "phonoGain") $("phonoGain").value = S.phonoGain;
   $("vPhonoGain").textContent = "+" + Math.round(S.phonoGain || 0) + " dB";
   seg("recClean", S.recClean ? 1 : 0);
@@ -853,6 +880,8 @@ function sideStatus() {
 }
 $("sideNew").addEventListener("click", () => send({cmd: "side_new"}));
 $("clipLatch").addEventListener("click", () => { clipIn = clipOut = false; for (const k in HOLD) HOLD[k] = {db: -120, t: 0}; levelsStatus(); });
+$("helpBox").addEventListener("toggle", () => { try { localStorage.setItem("vc.helpOpen", $("helpBox").open ? "1" : "0"); } catch (e) {} });
+try { if (localStorage.getItem("vc.helpOpen") === "1") $("helpBox").open = true; } catch (e) {}
 $("lvBox").addEventListener("toggle", () => { try { localStorage.setItem("vc.lvOpen", $("lvBox").open ? "1" : "0"); } catch (e) {} });
 try { if (localStorage.getItem("vc.lvOpen") === "0") $("lvBox").open = false; } catch (e) {}
 // ---- Recording ----
@@ -898,8 +927,8 @@ function renderRecFmt() {
   const bits = S.recBits || (wav ? 32 : 24), bitsTxt = bits === 32 ? t("rec.b32") : bits + " bits";
   const rate = St.rate || S.rate || 48000;
   let n = t("rec.fmt.now", wav ? "WAV" : "FLAC", bitsTxt, fr(rate / 1000, rate % 1000 ? 1 : 0) + " kHz");
-  n += !S.recBits ? (wav ? t("rec.fmt.max32") : t("rec.fmt.max")) : bits === 16 ? t("rec.fmt.16") : "";
-  n += on ? " " + t("rec.rate.busy") : t("rec.rate.note");
+  if (!S.recBits) n += " " + t("rec.fmt.isMax");
+  if (on) n += " " + t("rec.rate.busy");
   $("recFmtNote").textContent = n;
 }
 $("recFmt").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; S.recFmt = +b.dataset.v; renderRecFmt(); send({cmd: "set", recFmt: S.recFmt}); renderRecs(); });
@@ -920,8 +949,9 @@ function recStatus() {
   if (on) { $("recTime").textContent = dur(St.recSec); $("recFile").textContent = (St.recName || "") + " · " + t(St.recClean ? "rec.now.clean" : "rec.now.raw"); }
   let n = recMessage(St.recMsg);
   if (on && St.recLost > 0) n = t("rec.lost");
-  $("recNote").textContent = n || t(S.recClean ? "rec.note.clean" : "rec.note");
-  $("recNote").className = "note" + (n ? " warn" : "");
+  $("recNote").textContent = n;
+  $("recNote").className = "note warn";
+  $("recNote").hidden = !n;
 }
 function renderRecs() {
   const ul = $("recList"); ul.innerHTML = "";
@@ -1063,7 +1093,7 @@ function applyLayout() {
 function orgTitle(sec) {
   const id = sec.dataset.blk;
   const key = {listen: "listen.title", sens: "sens.title", levels: "levels.title", stats: "org.stats", ad: "ad.title", adv: "adv.title",
-    rec: "rec.title", file: "file.title2", recs: "recs.title", card: "card.title"}[id];
+    rec: "rec.title", file: "file.title2", recs: "recs.title", card: "card.title", help: "help.title"}[id];
   return key ? t(key) : id;
 }
 function orgButtons() {

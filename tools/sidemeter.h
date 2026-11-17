@@ -14,9 +14,10 @@
 //
 // The audio thread K-weights the original (2 small filters per sample) and,
 // every period, puts the sums of each channel into a lock-free queue.
-// A new side starts when the signal comes back after ≥ 8 s of "arm up"
-// (level < −80 dBFS: no groove noise at all), or on request ("New side" button,
-// or "I am dropping the stylus" of the anti-distortion).
+// A new side starts when the groove comes back after ≥ 6 s of "arm up" (no
+// treble peak above −50 dBFS: neither music nor surface noise; the hum of the
+// raised arm is ignored), or on request ("New side" button, or "I am dropping
+// the stylus" of the anti-distortion).
 // Original work based on the public standards.
 #pragma once
 
@@ -29,7 +30,7 @@
 
 namespace vc {
 
-struct SideItem { float kl, kr, ll, rr, pl, pr; uint32_t n; };   // K-weighted Σx², Σx², peaks
+struct SideItem { float kl, kr, ll, rr, pl, pr, ph; uint32_t n; };   // K-weighted Σx², Σx², peaks, treble peak
 
 struct SideRing {                       // single-producer / single-consumer queue
     static constexpr uint32_t N = 1024;
@@ -51,18 +52,30 @@ struct SideRing {                       // single-producer / single-consumer que
 };
 
 // Audio thread: K-weighting filters of the two channels + sums of one period.
+// The treble peak (high-pass 1 kHz) tells "stylus in the groove" from "arm raised":
+// the groove always brings surface noise and ticks in the treble, while with the
+// arm raised there is only hum (bass) and a little hiss, whatever the gain.
 struct SideTap {
-    Biquad shelf[2], hp[2];
-    void prepare(double fs) { for (int c = 0; c < 2; ++c) { kWeighting(fs, shelf[c], hp[c]); } }
+    Biquad shelf[2], hp[2], tre[2];
+    void prepare(double fs) {
+        for (int c = 0; c < 2; ++c) {
+            kWeighting(fs, shelf[c], hp[c]);
+            // Butterworth high-pass, 1 kHz, 2nd order.
+            const double K = std::tan(M_PI * 1000.0 / fs), Q = 0.7071067811865476, a0 = 1.0 + K / Q + K * K;
+            tre[c].b0 = float(1.0 / a0); tre[c].b1 = float(-2.0 / a0); tre[c].b2 = float(1.0 / a0);
+            tre[c].a1 = float(2.0 * (K * K - 1.0) / a0); tre[c].a2 = float((1.0 - K / Q + K * K) / a0);
+        }
+    }
     SideItem sums(const float* l, const float* r, size_t n) {
-        double kl = 0, kr = 0, ll = 0, rr = 0; float pl = 0, pr = 0;
+        double kl = 0, kr = 0, ll = 0, rr = 0; float pl = 0, pr = 0, ph = 0;
         for (size_t i = 0; i < n; ++i) {
             const float a = l[i], b = r[i];
             const float ka = hp[0].tick(shelf[0].tick(a)), kb = hp[1].tick(shelf[1].tick(b));
             kl += double(ka) * ka; kr += double(kb) * kb; ll += double(a) * a; rr += double(b) * b;
             pl = std::fmax(pl, std::fabs(a)); pr = std::fmax(pr, std::fabs(b));
+            ph = std::fmax(ph, std::fmax(std::fabs(tre[0].tick(a)), std::fabs(tre[1].tick(b))));
         }
-        return {float(kl), float(kr), float(ll), float(rr), pl, pr, uint32_t(n)};
+        return {float(kl), float(kr), float(ll), float(rr), pl, pr, ph, uint32_t(n)};
     }
 };
 
@@ -87,7 +100,7 @@ public:
     }
     void add(const SideItem& it) {
         cur_.k += double(it.kl) + it.kr; cur_.l += it.ll; cur_.r += it.rr;
-        cur_.pl = std::max(cur_.pl, it.pl); cur_.pr = std::max(cur_.pr, it.pr); cur_.n += it.n;
+        cur_.pl = std::max(cur_.pl, it.pl); cur_.pr = std::max(cur_.pr, it.pr); cur_.ph = std::max(cur_.ph, it.ph); cur_.n += it.n;
         if (cur_.n >= blockLen_) { block(cur_); cur_ = Block{}; }
     }
     // Once per second.
@@ -118,8 +131,10 @@ public:
         peakDb = pk > 0 ? 20.0 * std::log10(pk) : NAN;
         plr = (std::isfinite(lufs) && std::isfinite(peakDb)) ? peakDb - lufs : NAN;
         // DR: 3 s blocks of the side (+ the block in progress if it already lasts 1 s).
+        // At least 4 whole blocks (12 s of music): before that, one loud and one
+        // quiet block would give a meaningless figure.
         const bool withCur = bigCur_.n >= rate_;
-        if (big_.size() + withCur >= 2) {
+        if (big_.size() >= 4) {
             double drs = 0; int nch = 0;
             for (int c = 0; c < 2; ++c) {
                 rmsTmp_.clear(); pkTmp_.clear();
@@ -133,17 +148,19 @@ public:
                 const double rms = std::sqrt(q / top), pk2 = pkTmp_[1];
                 if (rms > 1e-9 && pk2 > 0) { drs += 20.0 * std::log10(pk2 / rms); ++nch; }
             }
-            dr = nch ? drs / nch : NAN;
+            dr = nch ? std::max(0.0, drs / nch) : NAN;
         }
     }
 
 private:
-    struct Block { double k = 0, l = 0, r = 0; float pl = 0, pr = 0; uint32_t n = 0; };
+    struct Block { double k = 0, l = 0, r = 0; float pl = 0, pr = 0, ph = 0; uint32_t n = 0; };
     struct Big { double l = 0, r = 0; float pl = 0, pr = 0; uint32_t n = 0; };
     void block(const Block& b) {
         const double lvl = 10.0 * std::log10(std::max(1e-30, std::max(b.l, b.r) / b.n));
-        if (lvl < -80.0) {             // quiet: a gap between two tracks, or the arm raised
-            if (++armBlocks_ >= kArm) { armUp = true; nPend_ = 0; }   // 8 s: arm raised, not counted
+        // No groove: no treble peak above −50 dBFS (the hum of a raised arm does not
+        // count), or nothing at all. A gap between two tracks, or the arm raised.
+        if (b.ph < 3.16e-3f || lvl < -80.0) {
+            if (++armBlocks_ >= kArm) { armUp = true; nPend_ = 0; }   // 6 s: arm raised, not counted
             if (!started_ || armUp) return;
             if (nPend_ < kArm) pend_[nPend_++] = b;                      // counted only if the music comes back
             return;
@@ -160,7 +177,7 @@ private:
         bigCur_.n += b.n;
         if (bigCur_.n >= 30u * blockLen_) { big_.push_back(bigCur_); bigCur_ = Big{}; }
     }
-    static constexpr int kArm = 80;   // 8 s below −80 dBFS: arm raised (a quiet passage is shorter)
+    static constexpr int kArm = 60;   // 6 s without groove: arm raised (a gap between tracks is shorter)
     Block pend_[kArm];
     int nPend_ = 0;
     unsigned blockLen_ = 4800, rate_ = 48000;

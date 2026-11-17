@@ -108,6 +108,8 @@ vc-bench --rate 48000 --seconds 10
   vraiment, avec la charge estimée. Changer de carte ou de fréquence coupe le son environ 1 seconde ; si la nouvelle
   configuration échoue, l'ancienne est rétablie toute seule.
 - Bouton **EN / FR** dans la barre du haut (le choix est retenu par le navigateur).
+- Carte **Aide** (en bas, repliable) : ce que fait chaque réglage. Les explications ne sont plus sous les réglages,
+  les cartes restent courtes.
 - Bouton **⇅ Organiser** dans la barre du haut : chaque carte se replie sur son titre avec des flèches **▲ ▼** ; monte
   en haut les cartes que tu utilises le plus. Sur ordinateur la page a deux colonnes : ▲ sur la première carte de la
   colonne de droite la passe à la fin de celle de gauche (et ▼ dans l'autre sens). L'ordre est enregistré par le
@@ -179,8 +181,10 @@ La carte **Niveaux** se replie (son titre affiche alors seulement le conseil).
     compressé (rouge).
   - **Crête / sonie** (PLR) : plus haute crête moins la sonie intégrée.
   - **Sonie** (LUFS) : sonie intégrée ITU-R BS.1770 (les silences entre les morceaux ne comptent pas).
-  - Durée depuis la pose du diamant. Une **nouvelle face** démarre toute seule quand la musique revient après 8 s de
-    bras levé (sous −80 dBFS), avec le bouton **Nouvelle face**, ou avec « Je pose le diamant » (anti-distorsion).
+  - Durée depuis la pose du diamant. Une **nouvelle face** démarre toute seule quand le diamant est reposé après 6 s de
+    bras levé : plus aucun bruit de sillon dans les aigus (le ronflement d'un bras levé, même fort, est ignoré). Aussi
+    avec le bouton **Nouvelle face**, ou avec « Je pose le diamant » (anti-distorsion). Sous la durée, « bras levé »
+    s'affiche quand il est détecté. Le DR s'affiche après 12 s de musique.
   - Les clics font partie du son original : ils peuvent un peu relever les crêtes (le DR prend la deuxième plus haute
     crête pour limiter ça). Vérifié face aux mesures DR et BS.1770 de FFmpeg sur de vrais disques (±0,4 dB).
 

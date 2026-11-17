@@ -78,6 +78,14 @@
   // ---- Card placed at the top of the second column ----
   const card = document.getElementById("fileTpl").content.firstElementChild.cloneNode(true);
   document.getElementById("recCard").after(card);   // right after "Recording"
+  // Its explanation goes into the "Help" card with the others.
+  {
+    const hb = document.getElementById("helpBody"), note = card.querySelector('[data-i18n="file.note"]');
+    if (hb && note) {
+      const h = document.createElement("h3"); h.className = "sub"; h.dataset.i18n = "file.title";
+      note.className = ""; hb.append(h, note);
+    }
+  }
 
   let F = {state: 0}, sending = -1, side = "c";
   let fmt = "wav";

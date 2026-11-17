@@ -62,6 +62,26 @@ int main() {
         check("3 s of silence inside the side: same side", double(m.sideCount - b2), 0.0, 0.0);
         check("... and the silence counts in the duration (s)", m.seconds, 10.0, 0.3);
     }
+    {
+        // Real conditions: the raised arm still gives HUM (50 Hz at −30 dBFS, built-in
+        // preamp with a lot of gain) and a little hiss; the groove gives surface noise.
+        SideTap tap; tap.prepare(rate); SideMeter m; m.reset(rate);
+        uint32_t s = 7;
+        auto noise = [&]() { s = s * 1664525u + 1013904223u; return (s >> 8) / double(1 << 24) * 2 - 1; };
+        auto music = [&](double t, float& l, float& r) { l = r = float(0.2 * std::sin(2 * M_PI * 440 * t) + 0.003 * noise()); };
+        feed(tap, m, 20, music);
+        const unsigned n0 = m.sideCount;
+        // Gap between two tracks: only surface noise (−55 dBFS RMS) for 4 s.
+        feed(tap, m, 4, [&](double, float& l, float& r) { l = r = float(0.0031 * noise()); });
+        feed(tap, m, 5, music);
+        check("4 s of surface noise between tracks: same side", double(m.sideCount - n0), 0.0, 0.0);
+        // Arm raised: hum at −30 dBFS + hiss at −90 dBFS for 20 s, then the next side.
+        feed(tap, m, 20, [&](double t, float& l, float& r) { l = r = float(0.0316 * std::sin(2 * M_PI * 50 * t) + 0.00003 * noise()); });
+        check("arm raised with a loud hum: seen as arm raised", m.armUp ? 1.0 : 0.0, 1.0, 0.0);
+        feed(tap, m, 6, music);
+        check("... then the stylus is dropped: new side", double(m.sideCount - n0), 1.0, 0.0);
+        check("... duration of the new side (s)", m.seconds, 6.0, 0.3);
+    }
     std::printf(fails ? "\n%d FAILURE(S)\n" : "\nAll side dynamics tests passed.\n", fails);
     return fails ? 1 : 0;
 }

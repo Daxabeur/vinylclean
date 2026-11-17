@@ -107,6 +107,8 @@ vc-bench --rate 48000 --seconds 10
   estimated load. Changing the card or the rate cuts the sound for about 1 second; if the new configuration
   fails, the previous one is restored automatically.
 - **EN / FR** button in the top bar (the choice is remembered by the browser).
+- **Help** card (at the bottom, foldable): what each setting does. The explanations are no longer under the
+  settings, so the cards stay short.
 - **⇅ Arrange** button in the top bar: every card folds to its title with **▲ ▼** arrows; move the cards you use most
   to the top. On a computer the page has two columns: ▲ on the first card of the right column moves it to the end of the
   left one (and ▼ the other way). The order is saved by the program: the same on every screen. "Default order" puts
@@ -176,8 +178,10 @@ The **Levels** card can be folded (its title then shows the advice only).
     blocks). **DR 14 and more**: very dynamic (green); **8 to 13**: usual; **7 and less**: strongly compressed (red).
   - **Peak / loudness** (PLR): highest peak minus the integrated loudness.
   - **Loudness** (LUFS): integrated loudness ITU-R BS.1770 (silences between tracks are gated out).
-  - Duration since the stylus drop. A **new side** starts by itself when the music comes back after 8 s with the arm
-    raised (below −80 dBFS), with the **New side** button, or with "I am dropping the stylus" (anti-distortion).
+  - Duration since the stylus drop. A **new side** starts by itself when the stylus is dropped after 6 s with the arm
+    raised: no surface noise in the treble any more (the hum of a raised arm, even loud, is ignored). Also with the
+    **New side** button, or with "I am dropping the stylus" (anti-distortion). The label under the duration says "arm
+    raised" when it is detected. DR is shown after 12 s of music.
   - Clicks are part of the original sound: they can raise the peaks a little (DR uses the second highest peak to
     limit this). Checked against the DR and BS.1770 meters of FFmpeg on real records (±0.4 dB).
 
