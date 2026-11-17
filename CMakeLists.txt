@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.13)
-project(vinylclean VERSION 1.4.0 LANGUAGES CXX)
+project(vinylclean VERSION 1.5.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -23,6 +23,8 @@ add_library(vccore STATIC
   core/declick.cpp
   core/decrackle.cpp
   core/antidist.cpp)
+find_package(Threads REQUIRED)
+target_link_libraries(vccore PUBLIC Threads::Threads)
 target_include_directories(vccore PUBLIC core)
 
 # ---- Tools ----
@@ -87,12 +89,25 @@ if(ALSA_FOUND)
   install(FILES web/index.html DESTINATION share/vinylclean)
 endif()
 
+# Side dynamics (DR, loudness), clock drift correction, page test server.
+add_executable(vc-tests-side tests/test_side.cpp)
+target_include_directories(vc-tests-side PRIVATE tools)
+add_executable(vc-tests-drift tests/test_drift.cpp)
+target_include_directories(vc-tests-drift PRIVATE tools)
+if(NOT WIN32)
+  add_executable(vc-page-test-server tests/page_test_server.cpp tools/web_server.cpp)
+  target_include_directories(vc-page-test-server PRIVATE tools)
+  target_link_libraries(vc-page-test-server Threads::Threads)
+endif()
+
 enable_testing()
+add_test(NAME side COMMAND vc-tests-side)
+add_test(NAME drift COMMAND vc-tests-drift)
 add_test(NAME declick COMMAND vc-tests)
 add_test(NAME decrackle COMMAND vc-tests-crackle)
 add_test(NAME loudness COMMAND vc-tests-loudness)
 
-install(TARGETS vc-file vc-bench vc-tests vc-tests-crackle vc-tests-loudness vc-tests-riaa vc-tests-antidist RUNTIME DESTINATION bin)
+install(TARGETS vc-file vc-bench vc-tests vc-tests-crackle vc-tests-loudness vc-tests-riaa vc-tests-antidist vc-tests-side vc-tests-drift RUNTIME DESTINATION bin)
 if(ALSA_FOUND)
   install(TARGETS vc-live RUNTIME DESTINATION bin)
 endif()

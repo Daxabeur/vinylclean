@@ -34,6 +34,7 @@ static void usage() {
         "  --disc 33|45|maxi  --side-min MIN  --radius MM (fixed position)  --dist-int X (0..1.5)\n"
         "  --mode M         repair (default) | removed | bypass\n"
         "  --float          writes the output as 32-bit float\n"
+        "  --threads 2      second channel on another core (same result, faster)\n"
         "The output is aligned with the input (latency compensated): both files\n"
         "can be compared in an audio editor.\n");
 }
@@ -43,6 +44,8 @@ int main(int argc, char** argv) {
     std::string inPath = argv[1], outPath = argv[2];
     ChainParams p = defaultChainParams();
     bool asFloat = false, riaa = false, rumble = true;
+    int threads = 1;
+    float warp = 0.f, warpC = 0.f;
     double phonoGainDb = 0.0;
     for (int i = 3; i < argc; ++i) {
         std::string a = argv[i];
@@ -59,6 +62,9 @@ int main(int argc, char** argv) {
         else if (a == "--protect") { const int v = std::atoi(next().c_str()); p.declick.protect = p.decrackle.protect = v; }
         else if (a == "--mode") p.mode = modeFromName(next().c_str());
         else if (a == "--float") asFloat = true;
+        else if (a == "--threads") threads = std::atoi(argv[++i]);
+        else if (a == "--warp") warp = float(std::atof(argv[++i]));
+        else if (a == "--warp-crackle") warpC = float(std::atof(argv[++i]));
         else if (a == "--riaa") riaa = true;
         else if (a == "--phono-gain") phonoGainDb = std::atof(next().c_str());
         else if (a == "--rumble") rumble = (next() != "off");
@@ -82,6 +88,9 @@ int main(int argc, char** argv) {
     if (!readWav(inPath, w, err)) { std::printf("Error: %s\n", err.c_str()); return 1; }
     Chain ch;
     if (!ch.prepare(w.sampleRate, w.channels)) { std::printf("Error: unsupported sample rate or channel count\n"); return 1; }
+    ChannelWorker worker;
+    if (threads >= 2 && w.channels == 2 && worker.start()) ch.setWorker(&worker);   // same result, 2 cores
+    p.declick.warp = warp; p.decrackle.warp = warpC;
     ch.setParams(p);
     if (p.dist.enabled && p.dist.autoPos) ch.distStartSide();   // the file starts at the beginning of a side
 

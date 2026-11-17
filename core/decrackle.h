@@ -26,6 +26,7 @@ struct DecrackleParams {
     float kOverride    = 0.f;   // > 0: forced threshold k (tuning tools)
     bool  multiband    = true;  // multiband repair
     bool  stereo       = true;  // use the other channel
+    float warp         = 0.f;   // warped prediction for the detection (0 = classic)
 };
 
 // Decrackle threshold k: 8 (intensity 1) → 3.5 (intensity 10).
@@ -41,6 +42,7 @@ public:
     void setParams(const DecrackleParams& p);
     void process(const float* const* in, float* const* out, int n) { eng_.process(in, out, n); }
     DeclickStats stats() const { return eng_.stats(); }
+    void setWorker(ChannelWorker* w) { eng_.setWorker(w); }
 private:
     Declicker eng_;
 };
@@ -71,6 +73,8 @@ public:
     DeclickStats decrackleStats() const { return cr_.stats(); }
     AntiDistState distState() const { return ad_.state(); }
     void distStartSide() { ad_.forceSideSec(0.0); }   // "the stylus was just dropped"
+    // Second channel on a helper thread ("one core per channel"), nullptr = off. Same result.
+    void setWorker(ChannelWorker* w) { dc_.setWorker(w); cr_.setWorker(w); }
 private:
     static constexpr int kChunk = 256;
     Declicker dc_;

@@ -1,5 +1,5 @@
-// vinylclean desktop — recording of the RAW turntable sound to FLAC while
-// listening. Same design as the Raspberry Pi recorder (tools/recorder.h):
+// vinylclean desktop — recording of the turntable sound (raw or cleaned) to
+// FLAC (16 / 24 bits) or WAV (16 / 24 bits, 32-bit float) while listening. Same design as the Raspberry Pi recorder (tools/recorder.h):
 // lock-free ring filled by the audio thread, low-priority writer thread.
 // Portable version (Windows + Linux): std::filesystem, UTF-8 paths.
 #pragma once
@@ -30,11 +30,16 @@ public:
     ~Recorder() { stop(); }
 
     // ---- Main thread ----
-    // Starts recording into `path` (FLAC file). bits = 16 or 24.
+    // Starts recording into `path`. wav = false: FLAC, bits 16 or 24.
+    // wav = true: WAV, bits 16, 24 or 32 (32 = 32-bit float).
     bool start(const std::string& path, unsigned rate, int channels, int bits, const std::string& title, std::string& err,
-               const std::string& comment = "Raw recording (no processing) — vinylclean") {
+               const std::string& comment = "Raw recording (no processing) — vinylclean", bool wav = false) {
         stop();
-        if (channels < 1 || channels > 2 || (bits != 16 && bits != 24) || rate < 8000) { err = "unsupported format"; return false; }
+        if (channels < 1 || channels > 2 || (bits != 16 && bits != 24 && !(wav && bits == 32)) || rate < 8000) { err = "unsupported format"; return false; }
+        wav_ = wav; float_ = (bits == 32);
+        if (wav) {
+            if (!openWav(path, rate, channels, bits, title, comment)) { err = "cannot create the file"; return false; }
+        } else {
         enc_ = FLAC__stream_encoder_new();
         if (!enc_) { err = "out of memory"; return false; }
         FLAC__stream_encoder_set_channels(enc_, unsigned(channels));
@@ -65,9 +70,10 @@ public:
             freeEncoder();
             return false;
         }
+        }
         ch_ = channels; bits_ = bits; rate_ = rate; path_ = path;
-        scale_ = float(1 << (bits - 1));
-        maxv_ = (1 << (bits - 1)) - 1;
+        scale_ = float_ ? 1.f : float(1 << (bits - 1));
+        maxv_ = float_ ? 0x7FFFFFFF : (1 << (bits - 1)) - 1;
         frames_ = 0; dropped_ = 0;
         { std::lock_guard<std::mutex> lk(m_); error_.clear(); }
         r_.store(w_.load());           // empty ring
@@ -108,9 +114,23 @@ public:
         size_t pos = size_t(w % cap_);
         for (size_t i = 0; i < frames; ++i)
             for (int c = 0; c < ch; ++c) {
-                long v = std::lrint(double(planar[c][i]) * scale_);
-                v = std::min<long>(maxv_, std::max<long>(-maxv_ - 1, v));
-                buf_[pos] = int32_t(v);
+                const float x = planar[c][i];
+                int32_t out;
+                if (float_) {
+                    std::memcpy(&out, &x, 4);   // 32-bit float: the exact value
+                } else {
+                    double y = double(x) * scale_;
+                    if (bits_ == 16 && y != std::nearbyint(y)) {
+                        // TPDF dither (±1 LSB triangular): no distortion of quiet passages.
+                        // A value already exact in 16 bits (16-bit card, raw sound) is kept as is.
+                        rnd_ = rnd_ * 1664525u + 1013904223u; const double u1 = (rnd_ >> 8) * (1.0 / 16777216.0);
+                        rnd_ = rnd_ * 1664525u + 1013904223u; const double u2 = (rnd_ >> 8) * (1.0 / 16777216.0);
+                        y += u1 - u2;
+                    }
+                    long v = std::lrint(y);
+                    out = int32_t(std::min<long>(maxv_, std::max<long>(-maxv_ - 1, v)));
+                }
+                buf_[pos] = out;
                 if (++pos == cap_) pos = 0;
             }
         w_.store(w + need, std::memory_order_release);
@@ -120,6 +140,7 @@ private:
     void writerLoop() {
         lowerThreadPriority();   // never ahead of the sound
         std::vector<int32_t> chunk(size_t(65536) * 2);
+        std::vector<unsigned char> bytes(chunk.size() * 4);
         for (;;) {
             const uint64_t w = w_.load(std::memory_order_acquire);
             uint64_t r = r_.load(std::memory_order_relaxed);
@@ -134,6 +155,17 @@ private:
             size_t pos = size_t(r % cap_);
             for (size_t i = 0; i < n; ++i) { chunk[i] = buf_[pos]; if (++pos == cap_) pos = 0; }
             r_.store(r + n, std::memory_order_release);
+            if (wav_) {
+                const char* e = writeWav(chunk.data(), n, bytes);
+                if (e) {
+                    std::lock_guard<std::mutex> lk(m_);
+                    error_ = e;
+                    active_.store(false, std::memory_order_release);
+                    break;
+                }
+                frames_ += n / size_t(ch_);
+                continue;
+            }
             if (!FLAC__stream_encoder_process_interleaved(enc_, chunk.data(), unsigned(n / size_t(ch_)))) {
                 std::lock_guard<std::mutex> lk(m_);
                 error_ = "write error (disk full?)";
@@ -145,6 +177,7 @@ private:
         writerDone_ = true;
     }
     void freeEncoder() {
+        closeWav();
         if (enc_) {
             if (FLAC__stream_encoder_get_state(enc_) == FLAC__STREAM_ENCODER_OK) FLAC__stream_encoder_finish(enc_);
             FLAC__stream_encoder_delete(enc_);
@@ -167,6 +200,63 @@ private:
     mutable std::mutex m_;
     std::string error_;
     FLAC__StreamEncoder* enc_ = nullptr;
+    // WAV
+    bool wav_ = false, float_ = false;
+    uint32_t rnd_ = 22222;
+    FILE* wf_ = nullptr;
+    uint64_t wavData_ = 0;
+    long wavRiffPos_ = 4, wavDataPos_ = 0, wavFactPos_ = 0;
+    bool openWav(const std::string& path, unsigned rate, int channels, int bits, const std::string& title, const std::string& comment) {
+        wf_ = openUtf8(path, "wb");
+        if (!wf_) return false;
+        std::string h;
+        auto u16 = [&](unsigned v) { h += char(v & 255); h += char((v >> 8) & 255); };
+        auto u32 = [&](uint32_t v) { for (int i = 0; i < 4; ++i) h += char((v >> (8 * i)) & 255); };
+        const unsigned bps = unsigned(bits / 8), align = bps * unsigned(channels);
+        h += "RIFF"; u32(0); h += "WAVE";
+        h += "fmt "; u32(float_ ? 18 : 16); u16(float_ ? 3 : 1); u16(unsigned(channels)); u32(rate); u32(rate * align); u16(align); u16(unsigned(bits));
+        if (float_) { u16(0); h += "fact"; u32(4); wavFactPos_ = long(h.size()); u32(0); }
+        // Tags: title, date, comment (LIST INFO chunk).
+        char d[32]; const std::time_t t = std::time(nullptr); std::strftime(d, sizeof d, "%Y-%m-%d", std::localtime(&t));
+        std::string info = "INFO";
+        auto tag = [&](const char* id, const std::string& v) {
+            std::string z = v.substr(0, 1000); z += '\0'; if (z.size() & 1) z += '\0';
+            info += id; for (int i = 0; i < 4; ++i) info += char((uint32_t(v.substr(0, 1000).size() + 1) >> (8 * i)) & 255); info += z;
+        };
+        tag("INAM", title); tag("ICRD", d); tag("ICMT", comment);
+        h += "LIST"; u32(uint32_t(info.size())); h += info;
+        h += "data"; wavDataPos_ = long(h.size()); u32(0);
+        wavData_ = 0;
+        return std::fwrite(h.data(), 1, h.size(), wf_) == h.size();
+    }
+    // Writer thread: packs and writes n samples. Returns an error message or nullptr.
+    const char* writeWav(const int32_t* v, size_t n, std::vector<unsigned char>& b) {
+        const unsigned bps = unsigned(bits_ / 8);
+        const uint64_t add = uint64_t(n) * bps;
+        if (wavData_ + add > 0xFFFFFFFFull - 65536 - 4096) return "the WAV file reached its 4 GB limit";
+        size_t k = 0;
+        for (size_t i = 0; i < n; ++i) {
+            const uint32_t x = uint32_t(v[i]);
+            for (unsigned j = 0; j < bps; ++j) b[k++] = (unsigned char)((x >> (8 * j)) & 255);   // little endian
+        }
+        if (std::fwrite(b.data(), 1, k, wf_) != k) return "write error (disk full?)";
+        wavData_ += add;
+        return nullptr;
+    }
+    void closeWav() {
+        if (!wf_) return;
+        auto put32 = [&](long pos, uint32_t v) {
+            unsigned char q[4] = {(unsigned char)(v & 255), (unsigned char)((v >> 8) & 255), (unsigned char)((v >> 16) & 255), (unsigned char)(v >> 24)};
+            std::fseek(wf_, pos, SEEK_SET); std::fwrite(q, 1, 4, wf_);
+        };
+        std::fflush(wf_);
+        const long end = wavDataPos_ + 4 + long(wavData_);
+        if (wavData_ & 1) { std::fseek(wf_, 0, SEEK_END); std::fputc(0, wf_); }   // chunks are word-aligned
+        put32(wavDataPos_, uint32_t(wavData_));
+        put32(wavRiffPos_, uint32_t(end + (wavData_ & 1) - 8));
+        if (wavFactPos_) put32(wavFactPos_, uint32_t(wavData_ / (4u * unsigned(ch_))));
+        std::fclose(wf_); wf_ = nullptr;
+    }
     FILE* fp_ = nullptr;
     FLAC__StreamMetadata* meta_[2] = {nullptr, nullptr};
     std::thread th_;
@@ -208,8 +298,8 @@ inline std::string safeRecName(const std::string& in) {
 }
 
 // Free path in dir: "name.flac", otherwise "name (2).flac", "name (3).flac"…
-inline std::string uniqueRecPath(const std::string& dir, const std::string& base) {
-    std::string p = dir + "/" + base + ".flac";
+inline std::string uniqueRecPath(const std::string& dir, const std::string& base, const std::string& ext = ".flac") {
+    std::string p = dir + "/" + base + ext;
     for (int i = 2; fileExists(p) && i < 10000; ++i) p = dir + "/" + base + " (" + std::to_string(i) + ").flac";
     return p;
 }
@@ -219,15 +309,37 @@ inline bool validRecFile(const std::string& dir, const std::string& name, std::s
     if (name.empty() || name.size() > 255 || name[0] == '.' || name.find('/') != std::string::npos ||
         name.find('\\') != std::string::npos || name.find(':') != std::string::npos || name.find('\0') != std::string::npos)
         return false;
-    if (name.size() < 6) return false;
-    std::string e = name.substr(name.size() - 5);
+    if (name.size() < 5) return false;
+    std::string e = name.substr(name.size() - (name.size() >= 6 ? 5 : 4));
     for (auto& c : e) c = char(std::tolower(static_cast<unsigned char>(c)));
-    if (e != ".flac") return false;
+    if (e != ".flac" && e.substr(e.size() - 4) != ".wav") return false;
     const std::string p = dir + "/" + name;
     std::error_code ec;
     if (!std::filesystem::is_regular_file(u8(p), ec)) return false;
     if (full) *full = p;
     return true;
+}
+
+// Duration of a WAV file from its header (fmt + data chunks). -1 if unknown.
+inline double wavSeconds(FILE* f) {
+    unsigned char h[12];
+    if (std::fread(h, 1, 12, f) != 12 || std::memcmp(h, "RIFF", 4) || std::memcmp(h + 8, "WAVE", 4)) return -1;
+    uint32_t rate = 0, align = 0;
+    for (int guard = 0; guard < 64; ++guard) {
+        unsigned char c[8];
+        if (std::fread(c, 1, 8, f) != 8) return -1;
+        const uint32_t len = uint32_t(c[4]) | (uint32_t(c[5]) << 8) | (uint32_t(c[6]) << 16) | (uint32_t(c[7]) << 24);
+        if (!std::memcmp(c, "fmt ", 4)) {
+            unsigned char fm[16];
+            if (len < 16 || std::fread(fm, 1, 16, f) != 16) return -1;
+            rate = uint32_t(fm[4]) | (uint32_t(fm[5]) << 8) | (uint32_t(fm[6]) << 16) | (uint32_t(fm[7]) << 24);
+            align = uint32_t(fm[12]) | (uint32_t(fm[13]) << 8);
+            if (std::fseek(f, long(len - 16 + (len & 1)), SEEK_CUR)) return -1;
+        } else if (!std::memcmp(c, "data", 4)) {
+            return (rate && align && len) ? double(len / align) / rate : -1;
+        } else if (std::fseek(f, long(len + (len & 1)), SEEK_CUR)) return -1;
+    }
+    return -1;
 }
 
 struct RecEntry { std::string name; uint64_t bytes = 0; double seconds = -1; std::time_t mtime = 0; };
@@ -246,7 +358,8 @@ inline std::vector<RecEntry> listRecordings(const std::string& dir) {
         FILE* f = openUtf8(p, "rb");
         if (f) {   // STREAMINFO: total samples and rate (bytes 18..)
             unsigned char h[42];
-            if (std::fread(h, 1, 42, f) == 42 && !std::memcmp(h, "fLaC", 4)) {
+            if (n.size() > 4 && (n.compare(n.size() - 4, 4, ".wav") == 0 || n.compare(n.size() - 4, 4, ".WAV") == 0)) r.seconds = wavSeconds(f);
+            else if (std::fread(h, 1, 42, f) == 42 && !std::memcmp(h, "fLaC", 4)) {
                 const unsigned char* si = h + 8;
                 const unsigned rate = (unsigned(si[10]) << 12) | (unsigned(si[11]) << 4) | (si[12] >> 4);
                 const uint64_t total = (uint64_t(si[13] & 15) << 32) | (uint64_t(si[14]) << 24) | (uint64_t(si[15]) << 16) | (uint64_t(si[16]) << 8) | si[17];

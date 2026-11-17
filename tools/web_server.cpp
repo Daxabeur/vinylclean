@@ -147,7 +147,8 @@ static void sendFileDetached(int fd, const std::string& path, const std::string&
         std::string ascii;
         for (unsigned char c : name) ascii += (c >= 0x20 && c < 0x7F && c != '"' && c != '\\') ? char(c) : '_';
         std::ostringstream h;
-        h << "HTTP/1.1 200 OK\r\nContent-Type: audio/flac\r\nContent-Length: " << st.st_size
+        const bool wav = name.size() > 4 && (name.compare(name.size() - 4, 4, ".wav") == 0 || name.compare(name.size() - 4, 4, ".WAV") == 0);
+        h << "HTTP/1.1 200 OK\r\nContent-Type: " << (wav ? "audio/wav" : "audio/flac") << "\r\nContent-Length: " << st.st_size
           << "\r\nContent-Disposition: attachment; filename=\"" << ascii << "\"; filename*=UTF-8''" << urlEncode(name)
           << "\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n";
         const std::string hs = h.str();

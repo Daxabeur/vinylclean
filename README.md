@@ -19,11 +19,15 @@ Turntable → (phono preamp) → USB sound card → Pi: vc-live → sound card o
 - **Linked stereo channels**: a click on one side only is easier to recognize, and long clicks are rebuilt with
   help from the other channel.
 - **Built-in phono preamp** (digital RIAA correction within ±0.012 dB) for a turntable connected without a preamp.
-- **Recording** of your records (raw sound, 24-bit FLAC) from the page, with download and delete buttons.
+- **Recording** of your records (raw or cleaned sound) in **FLAC or WAV**, 16 / 24 bits or 32-bit float, at the
+  sample rate of your choice, with download and delete buttons.
 - **End-of-side anti-distortion**: enter your tonearm length, alignment (Stevenson, Baerwald, Löfgren B or custom)
   and stylus type; the software computes and removes the playback distortion.
 - **Levels**: meters with peak hold and latched clipping, level advice, L/R balance, stereo / mono / phase check,
-  background noise between tracks, peak / average.
+  background noise between tracks, and the **dynamics of the side** (DR, peak / loudness, loudness) measured on the
+  original sound: how "loud" was this record mastered?
+- **Two different sound cards** (input on one, output on another): the drift of their clocks is corrected.
+- **One core per channel**: the two channels are processed in parallel (same sound, about 1.7× less time per period).
 - **Bilingual control page** (English / French), synchronized across all open screens.
 - **Desktop version** for Windows (.exe) and Linux (AppImage), with **file cleaning** (WAV / FLAC).
 
@@ -39,7 +43,7 @@ Only published methods are used; the sources are listed at the end of this docum
 | `vc-live` | Real-time listening + control page on `http://<pi-name>.local:8080`. |
 | `vc-file` | Same processing applied to a WAV file. |
 | `vc-bench` | CPU load on **your** Pi (sensitivities 0, 1, 3 and 5). |
-| `vc-tests`, `vc-tests-crackle`, `vc-tests-loudness`, `vc-tests-rec`, `vc-tests-riaa`, `vc-tests-antidist` | Automatic tests. |
+| `vc-tests`, `vc-tests-crackle`, `vc-tests-loudness`, `vc-tests-rec`, `vc-tests-riaa`, `vc-tests-antidist`, `vc-tests-side`, `vc-tests-drift` | Automatic tests. |
 
 ---
 
@@ -92,8 +96,10 @@ vc-bench --rate 48000 --seconds 10
 - **Listening**: Original (no processing) / Removed (what is taken out) / Cleaned.
 - **Phono preamp**: External / Built-in (RIAA), phono gain, rumble filter.
 - **Sensitivity**: clicks and crackles 0 to 5, music protection.
-- **Levels** (foldable): meters with peak hold and latched clipping, level advice, balance, stereo / mono, background noise.
-- **Recording**: file name, **raw or cleaned** sound, record / stop, list of recordings with download and delete.
+- **Levels** (foldable): meters with peak hold and latched clipping, level advice, balance, stereo / mono, background
+  noise, dynamics of the side (DR, peak / loudness, loudness).
+- **Recording**: file name, **raw or cleaned** sound, **FLAC or WAV**, bits, sample rate, record / stop, list of
+  recordings with download and delete.
 - **Anti-distortion**: turntable and cartridge settings, tracking-error graph.
 - **Advanced settings**: separate declick / decrackle sensitivities, fine intensities, maximum click length,
   multiband / full band, linked / separate channels.
@@ -101,6 +107,10 @@ vc-bench --rate 48000 --seconds 10
   estimated load. Changing the card or the rate cuts the sound for about 1 second; if the new configuration
   fails, the previous one is restored automatically.
 - **EN / FR** button in the top bar (the choice is remembered by the browser).
+- **⇅ Arrange** button in the top bar: every card folds to its title with **▲ ▼** arrows; move the cards you use most
+  to the top. On a computer the page has two columns: ▲ on the first card of the right column moves it to the end of the
+  left one (and ▼ the other way). The order is saved by the program: the same on every screen. "Default order" puts
+  everything back.
 
 All open screens stay **synchronized**. Settings are saved in `~/.config/vinylclean/settings.json` and
 reloaded at startup.
@@ -160,7 +170,16 @@ The **Levels** card can be folded (its title then shows the advice only).
   - **Stereo / mono**: Mono, Stereo, Wide stereo, or **Phase?** when the channels are opposed (a cable or the cartridge
     wired backwards on one side);
   - **Background noise**: the quietest moment between two tracks (state of the record);
-  - **Peak / average** (PLR) over the last minute: the larger it is, the less the music is squashed.
+- **Dynamics of the side** — measured on the **original** sound (turntable after the phono preamp, before any
+  cleaning), from the stylus drop to now, for the "loudness war" question:
+  - **DR**: the published "DR" method (3 s blocks; second highest peak against the RMS of the loudest 20 % of the
+    blocks). **DR 14 and more**: very dynamic (green); **8 to 13**: usual; **7 and less**: strongly compressed (red).
+  - **Peak / loudness** (PLR): highest peak minus the integrated loudness.
+  - **Loudness** (LUFS): integrated loudness ITU-R BS.1770 (silences between tracks are gated out).
+  - Duration since the stylus drop. A **new side** starts by itself when the music comes back after 8 s with the arm
+    raised (below −80 dBFS), with the **New side** button, or with "I am dropping the stylus" (anti-distortion).
+  - Clicks are part of the original sound: they can raise the peaks a little (DR uses the second highest peak to
+    limit this). Checked against the DR and BS.1770 meters of FFmpeg on real records (±0.4 dB).
 
 ---
 
@@ -202,8 +221,17 @@ On the control page, **Recording** card:
 
 - **Sound to record**: **Raw** (the turntable sound without declick, with the RIAA correction if the built-in preamp
   is selected) or **Cleaned** (after declick, decrackle and anti-distortion, whatever listening mode you choose). The
-  choice is shown next to the timer while recording. **24-bit FLAC** (raw: 16 bits if the card works in 16 bits), with
-  the title and date as tags.
+  choice is shown next to the timer while recording.
+- **File format**: **FLAC** (lossless, compressed) or **WAV** (uncompressed), with the title, date and a comment as tags.
+- **Bits**: **Maximum** (default) = FLAC 24 bits or WAV **32-bit float**; or 32-bit float (WAV only), 24 bits, 16 bits.
+  - Maximum really is the maximum: the sound card gives 24 bits, and the processing works in 32-bit float. FLAC
+    24 bits keeps everything the card gives; WAV 32-bit float keeps every value exactly, even above 0 dBFS (built-in
+    phono preamp with a lot of gain). A "32-bit integer" file would only add zeros.
+  - 16 bits (CD quality): with TPDF dither, so that quiet passages are not distorted. A value already exact in 16 bits
+    (16-bit card, raw sound) is kept as is.
+- **Sample rate**: the rates your card accepts. The recording is made at the rate of the card (no conversion): choosing
+  another rate changes the card's (about 1 s of silence, not during a recording).
+- A WAV file is limited to 4 GB (about 1 h 30 at 96 kHz in 32-bit float): the recording then stops by itself.
 - You can **listen and adjust the cleaning** while recording: the recording is not affected.
 - Files are stored in `~/recordings` on the Pi. A name already taken gets "(2)", "(3)"… : nothing is ever
   overwritten. With an empty name: "Recording <date> <time>".
@@ -213,7 +241,7 @@ On the control page, **Recording** card:
 Get all the files at once from a computer:
 
 ```bash
-scp "<user>@<pi-name>.local:~/recordings/*.flac" .
+scp "<user>@<pi-name>.local:~/recordings/*.{flac,wav}" .
 ```
 
 ---
@@ -359,8 +387,10 @@ The same cleaning on a computer, with the same control page in its own window, p
   Works on distributions with glibc 2.27 or newer (Ubuntu 18.04+, Debian 10+, Fedora…).
 
 **Real time**: in "Sound card and quality", choose the input (your sound card) and the output (speakers or headphones).
-Everything else works like on the Pi: sensitivity, protection, built-in phono preamp, anti-distortion, FLAC recording
-(saved in `Music/vinylclean`). Latency is about 60 to 100 ms.
+Everything else works like on the Pi: sensitivity, protection, built-in phono preamp, anti-distortion, dynamics of the
+side, card order, FLAC / WAV recording (saved in `Music/vinylclean`). Latency is about 60 to 100 ms. Two different
+cards for the input and the output: the clock drift is not corrected on the desktop version (small dropouts possible);
+use the same card for both when you can.
 
 **Clean a file**: choose a WAV or FLAC file, the output format (WAV or FLAC), then **Clean**. The current settings are
 used (sensitivity, protection, phono preamp, anti-distortion; the file is treated as one side from its start). When it is
@@ -387,6 +417,7 @@ version is not affected.
 | "The input is clipping" | lower the input gain of the sound card |
 | `Device or resource busy` | another program is using the sound card: stop it |
 | "dropouts" keep increasing | go back to 48 kHz; check `vcgencmd get_throttled` (0x0) and the power supply |
+| Strange behaviour with the two-core processing | add `--threads 1` to `VC_OPTS` in `/etc/default/vinylclean`, then `sudo systemctl restart vinylclean-live` (everything on one core, same sound) |
 | Notes are damaged | lower the sensitivity; protection "Maximum" |
 | Recording stops by itself | read the message in the Recording card (disk full, rate change…) |
 | Very bright, thin sound, no bass | the turntable is connected directly: Phono preamp → **Built-in** |
@@ -420,10 +451,10 @@ variables.
 
 ```
 core/       DSP: ar, lsar, declick, decrackle (+ chain), antidist (anti-distortion), riaa.h, presets.h
-tools/      vc_live.cpp, web_server.*, sha1.h, loudness.h, recorder.h, vc_file.cpp, vc_bench.cpp, wav.h, offline.h
+tools/      vc_live.cpp, web_server.*, sha1.h, loudness.h, sidemeter.h, drift.h, levels.h, recorder.h, vc_file.cpp, vc_bench.cpp, wav.h, offline.h
 web/        index.html (control page, English / French)
 desktop/    Windows / Linux version (vc_desktop.cpp, http_server.*, extra.html, build.sh, packaging/)
-tests/      test_declick.cpp, test_decrackle.cpp, test_loudness.cpp, test_recorder.cpp, test_riaa.cpp, test_antidist.cpp, synth.h
+tests/      test_declick.cpp, test_decrackle.cpp, test_loudness.cpp, test_recorder.cpp, test_riaa.cpp, test_antidist.cpp, test_side.cpp, test_drift.cpp, page_test_server.cpp, synth.h
 scripts/    install.sh, kiosk-install.sh, systemd services, default options
 cmake/      cross-compilation (PC → Pi), optional
 ```
@@ -454,7 +485,11 @@ cd build && ctest
 - J. K. Stevenson, "Pickup arm design", Wireless World, May 1966.
 - M. S. Corrington, "Tracing distortion in phonograph records", RCA Review 12, 1951; J. G. Woodward, E. C. Fox, "Theory of tracing distortion", RCA Review, 1947.
 - J. F. Kaiser, Kaiser window (oversampling half-band filter).
-- ITU-R BS.1770-4 (K-weighting, used for the peak / average ratio); EBU Tech 3341.
+- ITU-R BS.1770-4 (K-weighting, integrated loudness of the side); EBU Tech 3341.
+- Pleasurize Music Foundation, "DR" dynamic range measurement (published method; FFmpeg `drmeter` used to check).
+- J. O. Smith, *Digital Audio Resampling* (bandlimited interpolation, used for the clock drift correction).
+- P. Esquef, M. Karjalainen, V. Välimäki, "Detection of clicks in audio signals using warped linear prediction", 2002
+  (tried: `vc-file --warp`; not better than the classic prediction on the test benches, so off by default).
 - Xiph.Org, libFLAC (FLAC format, RFC 9639).
 - D. Reid, miniaudio (desktop audio input/output, public domain / MIT-0).
 - I. Fette, A. Melnikov, RFC 6455 "The WebSocket Protocol", 2011; FIPS 180-1 (SHA-1).

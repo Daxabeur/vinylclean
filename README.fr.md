@@ -20,11 +20,15 @@ Platine → (préampli phono) → carte son USB → Pi : vc-live → sortie de l
 - **Canaux stéréo liés** : un clic d'un seul côté est plus facile à reconnaître, et les longs clics sont
   reconstruits avec l'aide de l'autre canal.
 - **Préampli phono intégré** (correction RIAA numérique à ±0,012 dB) pour une platine branchée sans préampli.
-- **Enregistrement** de tes disques (son brut, FLAC 24 bits) depuis la page, avec boutons Télécharger et Supprimer.
+- **Enregistrement** de tes disques (son brut ou nettoyé) en **FLAC ou WAV**, 16 / 24 bits ou 32 bits flottant, à la
+  fréquence de ton choix, avec boutons Télécharger et Supprimer.
 - **Anti-distorsion de fin de face** : tu indiques la longueur de ton bras, ton alignement (Stevenson, Baerwald,
   Löfgren B ou sur mesure) et ta pointe ; le logiciel calcule et retire la distorsion de lecture.
 - **Niveaux** : vu-mètres avec crête maintenue et saturation mémorisée, conseil de réglage, équilibre G/D, stéréo / mono /
-  phase, bruit de fond entre les morceaux, crête / moyenne.
+  phase, bruit de fond entre les morceaux, et la **dynamique de la face** (DR, crête / sonie, sonie) mesurée sur le son
+  original : ce disque a-t-il été masterisé « fort » ?
+- **Deux cartes son différentes** (entrée sur l'une, sortie sur l'autre) : la dérive de leurs horloges est corrigée.
+- **Un cœur par canal** : les deux canaux sont traités en parallèle (même son, environ 1,7 fois moins de temps par période).
 - **Page de réglage bilingue** (anglais / français), synchronisée sur tous les écrans ouverts.
 - **Version de bureau** pour Windows (.exe) et Linux (AppImage), avec **nettoyage de fichiers** (WAV / FLAC).
 
@@ -40,7 +44,7 @@ décompilé ou imité. Seules des méthodes publiées sont utilisées ; les sour
 | `vc-live` | Écoute en temps réel + page de réglage sur `http://<nom-du-pi>.local:8080`. |
 | `vc-file` | Même traitement sur un fichier WAV. |
 | `vc-bench` | Charge processeur sur **ton** Pi (sensibilités 0, 1, 3 et 5). |
-| `vc-tests`, `vc-tests-crackle`, `vc-tests-loudness`, `vc-tests-rec`, `vc-tests-riaa`, `vc-tests-antidist` | Tests automatiques. |
+| `vc-tests`, `vc-tests-crackle`, `vc-tests-loudness`, `vc-tests-rec`, `vc-tests-riaa`, `vc-tests-antidist`, `vc-tests-side`, `vc-tests-drift` | Tests automatiques. |
 
 ---
 
@@ -93,8 +97,10 @@ vc-bench --rate 48000 --seconds 10
 - **Écoute** : Original (sans traitement) / Enlevé (ce qui est retiré) / Nettoyé.
 - **Préampli phono** : Externe / Intégré (RIAA), gain phono, anti-rumble.
 - **Sensibilité** : clics et craquements 0 à 5, protection de la musique.
-- **Niveaux** (repliable) : vu-mètres avec crête maintenue et saturation mémorisée, conseil de réglage, équilibre, stéréo / mono, bruit de fond.
-- **Enregistrement** : nom du fichier, son **brut ou nettoyé**, enregistrer / arrêter, liste des enregistrements avec téléchargement et suppression.
+- **Niveaux** (repliable) : vu-mètres avec crête maintenue et saturation mémorisée, conseil de réglage, équilibre, stéréo / mono,
+  bruit de fond, dynamique de la face (DR, crête / sonie, sonie).
+- **Enregistrement** : nom du fichier, son **brut ou nettoyé**, **FLAC ou WAV**, bits, fréquence, enregistrer / arrêter,
+  liste des enregistrements avec téléchargement et suppression.
 - **Anti-distorsion** : réglages de la platine et de la cellule, courbe de l'erreur d'angle.
 - **Paramètres avancés** : sensibilités séparées du déclick et du dé-crackle, intensités fines, longueur max d'un
   clic, multibande / pleine bande, canaux liés / séparés.
@@ -102,6 +108,10 @@ vc-bench --rate 48000 --seconds 10
   vraiment, avec la charge estimée. Changer de carte ou de fréquence coupe le son environ 1 seconde ; si la nouvelle
   configuration échoue, l'ancienne est rétablie toute seule.
 - Bouton **EN / FR** dans la barre du haut (le choix est retenu par le navigateur).
+- Bouton **⇅ Organiser** dans la barre du haut : chaque carte se replie sur son titre avec des flèches **▲ ▼** ; monte
+  en haut les cartes que tu utilises le plus. Sur ordinateur la page a deux colonnes : ▲ sur la première carte de la
+  colonne de droite la passe à la fin de celle de gauche (et ▼ dans l'autre sens). L'ordre est enregistré par le
+  programme : le même sur tous les écrans. « Ordre par défaut » remet tout comme avant.
 
 Tous les écrans ouverts restent **synchronisés**. Les réglages sont sauvegardés dans
 `~/.config/vinylclean/settings.json` et rechargés au démarrage.
@@ -162,7 +172,17 @@ La carte **Niveaux** se replie (son titre affiche alors seulement le conseil).
   - **Stéréo / mono** : Mono, Stéréo, Stéréo large, ou **Phase ?** quand les canaux s'opposent (un câble ou la cellule
     branché à l'envers d'un côté) ;
   - **Bruit de fond** : le moment le plus calme entre deux morceaux (état du disque) ;
-  - **Crête / moyenne** (PLR) sur la dernière minute : plus c'est grand, moins la musique est écrasée.
+- **Dynamique de la face** — mesurée sur le son **original** (platine après le préampli phono, avant tout nettoyage),
+  de la pose du diamant à maintenant, pour la question de la « loudness war » :
+  - **DR** : méthode « DR » publiée (blocs de 3 s ; deuxième plus haute crête face au niveau efficace des 20 % de blocs
+    les plus forts). **DR 14 et plus** : très dynamique (vert) ; **8 à 13** : habituel ; **7 et moins** : très
+    compressé (rouge).
+  - **Crête / sonie** (PLR) : plus haute crête moins la sonie intégrée.
+  - **Sonie** (LUFS) : sonie intégrée ITU-R BS.1770 (les silences entre les morceaux ne comptent pas).
+  - Durée depuis la pose du diamant. Une **nouvelle face** démarre toute seule quand la musique revient après 8 s de
+    bras levé (sous −80 dBFS), avec le bouton **Nouvelle face**, ou avec « Je pose le diamant » (anti-distorsion).
+  - Les clics font partie du son original : ils peuvent un peu relever les crêtes (le DR prend la deuxième plus haute
+    crête pour limiter ça). Vérifié face aux mesures DR et BS.1770 de FFmpeg sur de vrais disques (±0,4 dB).
 
 ---
 
@@ -207,8 +227,21 @@ Sur la page de réglage, carte **Enregistrement** :
 
 - **Son à enregistrer** : **Brut** (le son de la platine sans déclick, avec la correction RIAA si le préampli intégré
   est choisi) ou **Nettoyé** (après déclick, dé-crackle et anti-distorsion, quelle que soit l'écoute choisie). Le choix
-  est rappelé à côté du chronomètre pendant l'enregistrement. **FLAC 24 bits** (brut : 16 bits si la carte fonctionne
-  en 16 bits), avec le titre et la date en étiquettes.
+  est rappelé à côté du chronomètre pendant l'enregistrement.
+- **Format du fichier** : **FLAC** (sans perte, compressé) ou **WAV** (non compressé), avec le titre, la date et un
+  commentaire en étiquettes.
+- **Bits** : **Maximum** (par défaut) = FLAC 24 bits ou WAV **32 bits flottant** ; ou 32 bits flottant (WAV seulement),
+  24 bits, 16 bits.
+  - Le maximum est vraiment le maximum : la carte son donne 24 bits, et le traitement travaille en 32 bits flottant.
+    Le FLAC 24 bits garde tout ce que donne la carte ; le WAV 32 bits flottant garde chaque valeur exactement, même
+    au-dessus de 0 dBFS (préampli phono intégré avec beaucoup de gain). Un fichier « 32 bits entier » ne ferait
+    qu'ajouter des zéros.
+  - 16 bits (qualité CD) : avec un dither TPDF, pour que les passages calmes ne soient pas déformés. Une valeur déjà
+    exacte en 16 bits (carte 16 bits, son brut) est gardée telle quelle.
+- **Fréquence** : celles que ta carte accepte. L'enregistrement se fait à la fréquence de la carte (sans conversion) :
+  choisir une autre fréquence change celle de la carte (≈ 1 s de silence, pas pendant un enregistrement).
+- Un fichier WAV est limité à 4 Go (environ 1 h 30 à 96 kHz en 32 bits flottant) : l'enregistrement s'arrête alors
+  tout seul.
 - Tu peux **écouter et régler le nettoyage** pendant l'enregistrement : l'enregistrement n'est pas touché.
 - Les fichiers sont dans `~/recordings` sur le Pi. Un nom déjà pris reçoit « (2) », « (3) »… : rien n'est jamais
   écrasé. Sans nom : « Recording <date> <heure> ».
@@ -219,7 +252,7 @@ Sur la page de réglage, carte **Enregistrement** :
 Récupérer tous les fichiers d'un coup depuis un ordinateur :
 
 ```bash
-scp "<utilisateur>@<nom-du-pi>.local:~/recordings/*.flac" .
+scp "<utilisateur>@<nom-du-pi>.local:~/recordings/*.{flac,wav}" .
 ```
 
 ---
@@ -367,8 +400,10 @@ Le même nettoyage sur un ordinateur, avec la même page de réglage dans sa pro
   Fonctionne sur les distributions avec glibc 2.27 ou plus récente (Ubuntu 18.04+, Debian 10+, Fedora…).
 
 **Temps réel** : dans « Carte son et qualité », choisis l'entrée (ta carte son) et la sortie (enceintes ou casque). Tout le
-reste fonctionne comme sur le Pi : sensibilité, protection, préampli phono intégré, anti-distorsion, enregistrement FLAC
-(dans `Musique/vinylclean`). Latence d'environ 60 à 100 ms.
+reste fonctionne comme sur le Pi : sensibilité, protection, préampli phono intégré, anti-distorsion, dynamique de la
+face, ordre des cartes, enregistrement FLAC / WAV (dans `Musique/vinylclean`). Latence d'environ 60 à 100 ms. Deux
+cartes différentes pour l'entrée et la sortie : la dérive d'horloge n'est pas corrigée sur la version de bureau (petites
+coupures possibles) ; utilise la même carte pour les deux quand c'est possible.
 
 **Nettoyer un fichier** : choisis un fichier WAV ou FLAC, le format de sortie (WAV ou FLAC), puis **Nettoyer**. Les réglages
 actuels sont utilisés (sensibilité, protection, préampli phono, anti-distorsion ; le fichier est traité comme une face depuis
@@ -395,6 +430,7 @@ Linux. La version Raspberry Pi n'est pas modifiée.
 | « L'entrée sature » | baisser le gain d'entrée de la carte son |
 | `Device or resource busy` | un autre programme utilise la carte son : l'arrêter |
 | Les « coupures » augmentent | revenir à 48 kHz ; vérifier `vcgencmd get_throttled` (0x0) et l'alimentation |
+| Comportement bizarre avec le traitement sur deux cœurs | ajouter `--threads 1` à `VC_OPTS` dans `/etc/default/vinylclean`, puis `sudo systemctl restart vinylclean-live` (tout sur un cœur, même son) |
 | Des notes sont abîmées | baisser la sensibilité ; protection « Maximale » |
 | L'enregistrement s'arrête tout seul | lire le message de la carte Enregistrement (disque plein, changement de fréquence…) |
 | Son très aigu, maigre, sans graves | la platine est en direct : Préampli phono → **Intégré** |
@@ -430,10 +466,10 @@ Le code (commentaires, messages, options) est en anglais ; la page de réglage e
 
 ```
 core/       DSP : ar, lsar, declick, decrackle (+ chaîne), antidist (anti-distorsion), riaa.h, presets.h
-tools/      vc_live.cpp, web_server.*, sha1.h, loudness.h, recorder.h, vc_file.cpp, vc_bench.cpp, wav.h, offline.h
+tools/      vc_live.cpp, web_server.*, sha1.h, loudness.h, sidemeter.h, drift.h, levels.h, recorder.h, vc_file.cpp, vc_bench.cpp, wav.h, offline.h
 web/        index.html (page de réglage, anglais / français)
 desktop/    version Windows / Linux (vc_desktop.cpp, http_server.*, extra.html, build.sh, packaging/)
-tests/      test_declick.cpp, test_decrackle.cpp, test_loudness.cpp, test_recorder.cpp, test_riaa.cpp, test_antidist.cpp, synth.h
+tests/      test_declick.cpp, test_decrackle.cpp, test_loudness.cpp, test_recorder.cpp, test_riaa.cpp, test_antidist.cpp, test_side.cpp, test_drift.cpp, page_test_server.cpp, synth.h
 scripts/    install.sh, kiosk-install.sh, services systemd, options par défaut
 cmake/      compilation croisée (PC → Pi), facultatif
 ```
@@ -443,7 +479,9 @@ cmake/      compilation croisée (PC → Pi), facultatif
 Voir la liste complète dans [README.md](README.md#sources) : Godsill & Rayner (1998), Vaseghi & Rayner (1990),
 Janssen et al. (1986), Özdoğru (2022, 2025), Rund et al. (2021), Rajmic & Klimek (2004), Bello et al. (2005),
 IEC 60098, Löfgren (1938), Baerwald (1941), Stevenson (1966), Corrington (1951), Woodward & Fox (1947),
-ITU-R BS.1770-4, libFLAC, RFC 6455, miniaudio.
+ITU-R BS.1770-4, méthode « DR » (Pleasurize Music Foundation), J. O. Smith (rééchantillonnage), Esquef et al. (2002,
+prédiction déformée : essayée avec `vc-file --warp`, pas meilleure sur les bancs d'essai, donc désactivée), libFLAC,
+RFC 6455, miniaudio.
 
 ## Licence
 

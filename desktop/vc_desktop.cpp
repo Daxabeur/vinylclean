@@ -18,6 +18,7 @@
 #include "antidist.h"
 #include "loudness.h"
 #include "levels.h"
+#include "sidemeter.h"
 
 #include "http_server.h"
 #include "json.h"
@@ -76,7 +77,7 @@ struct Shared {
     std::atomic<float> peakIn[2], peakOut[2];
     std::atomic<unsigned> satCount{0};
     std::atomic<float> recPeak{0.f};      // peak of the recorded signal (silence auto-stop)
-    LoudRing loud;
+    SideRing side;   // dynamics of the side, ORIGINAL sound (after the phono preamp)
     LevelRing lv;
     std::atomic<bool> recClean{false};
     vcd::Recorder* rec = nullptr;
@@ -94,6 +95,9 @@ struct Settings {
     float phonoGainDb = 12.f;
     bool rumble = true;
     bool recClean = false;
+    int recFmt = 0;                // recording file: 0 FLAC, 1 WAV
+    int recBits = 0;               // 0 = maximum (FLAC 24 bits, WAV 32-bit float), or 16 / 24 / 32
+    std::string layout;            // order of the cards of the page ("id,id|id,id"), empty = default
     bool adOn = false, adAutoPos = true;
     float armLen = 222.f, null1 = 60.325f, null2 = 117.42f, stylusUm = 7.6f;
     float posMm = 100.f, sideMin = 20.f, adInt = 1.f;
@@ -107,14 +111,14 @@ static int commonSens(const Settings& s) {
     return (a >= 0 && a == b) ? a : -1;
 }
 static std::string settingsToJson(const Settings& s) {
-    char b[2048];
+    char b[4096];
     std::snprintf(b, sizeof b,
                   "{\"scale\":3,\"ad\":%d,\"armLen\":%g,\"align\":%d,\"null1\":%g,\"null2\":%g,\"stylus\":%d,\"stylusUm\":%g,\"disc\":%d,\"autoPos\":%d,\"posMm\":%g,\"sideMin\":%g,\"adInt\":%g,"
-                  "\"sens\":%d,\"sensDeclick\":%d,\"sensDecrackle\":%d,\"declick\":%g,\"decrackle\":%g,\"protect\":%d,\"maxclick\":%g,\"multiband\":%d,\"stereo\":%d,\"riaa\":%d,\"phonoGain\":%g,\"rumble\":%d,\"recClean\":%d,\"mode\":%d,"
+                  "\"sens\":%d,\"sensDeclick\":%d,\"sensDecrackle\":%d,\"declick\":%g,\"decrackle\":%g,\"protect\":%d,\"maxclick\":%g,\"multiband\":%d,\"stereo\":%d,\"riaa\":%d,\"phonoGain\":%g,\"rumble\":%d,\"recClean\":%d,\"recFmt\":%d,\"recBits\":%d,\"layout\":\"%s\",\"mode\":%d,"
                   "\"in\":\"%s\",\"out\":\"%s\",\"rate\":%u,\"periods\":%d}",
                   s.adOn ? 1 : 0, s.armLen, s.align, s.null1, s.null2, s.stylus, s.stylusUm, s.disc, s.adAutoPos ? 1 : 0, s.posMm, s.sideMin, s.adInt,
                   commonSens(s), declickSensForIntensity(s.declick), decrackleSensForIntensity(s.decrackle), s.declick, s.decrackle, s.protect, s.maxClick,
-                  s.multiband ? 1 : 0, s.stereo ? 1 : 0, s.riaa ? 1 : 0, s.phonoGainDb, s.rumble ? 1 : 0, s.recClean ? 1 : 0, s.mode,
+                  s.multiband ? 1 : 0, s.stereo ? 1 : 0, s.riaa ? 1 : 0, s.phonoGainDb, s.rumble ? 1 : 0, s.recClean ? 1 : 0, s.recFmt, s.recBits, jsonEscape(s.layout).c_str(), s.mode,
                   jsonEscape(s.inDev).c_str(), jsonEscape(s.outDev).c_str(), s.rate, s.periods);
     return b;
 }
@@ -133,6 +137,9 @@ static void settingsFromJson(const JsonFlat& j, Settings& s) {
     if (j.has("phonoGain")) s.phonoGainDb = clampf(j.num("phonoGain"), 0, 40);
     if (j.has("rumble")) s.rumble = j.num("rumble") != 0;
     if (j.has("recClean")) s.recClean = j.num("recClean") != 0;
+    if (j.has("recFmt")) s.recFmt = j.num("recFmt") != 0 ? 1 : 0;
+    if (j.has("recBits")) { const int b = int(j.num("recBits")); s.recBits = (b == 16 || b == 24 || b == 32) ? b : 0; }
+    if (j.has("layout")) s.layout = j.str("layout").substr(0, 400);
     if (j.has("ad")) s.adOn = j.num("ad") != 0;
     if (j.has("armLen")) s.armLen = clampf(j.num("armLen"), 150, 400);
     if (j.has("align")) s.align = int(clampf(j.num("align"), 0, 3));
@@ -378,7 +385,8 @@ struct Engine {
     int period = 512;
     Chain dec;
     PhonoStage phono[2];
-    Biquad kShelf[2], kHp[2];
+    SideTap sideTap;
+    ChannelWorker worker;
     std::vector<float> pin, pout, prest;
     std::vector<const float*> ip;
     std::vector<float*> op, rp;
@@ -435,6 +443,7 @@ struct Engine {
             if (over) s->satPhono.fetch_add(1, std::memory_order_relaxed);
         }
         s->lv.push(levelSums(ip[0], ip[1], size_t(P)));   // balance / stereo / noise
+        s->side.push(sideTap.sums(ip[0], ip[1], size_t(P)));   // dynamics of the side (original)
         const bool recClean = s->recClean.load(std::memory_order_relaxed);
         if (s->rec && !recClean) s->rec->push(ip.data(), 2, size_t(P));   // raw sound: lock-free copy (after the RIAA)
         {
@@ -474,16 +483,12 @@ struct Engine {
         s->adGroove.store(float(ds.grooveCms), r); s->adSide.store(float(ds.sideSec), r);
         s->adReady.store(ds.levelReady, r);
 
-        float ms = 0.f;
         for (int i = 0; i < P; ++i)
             for (int c = 0; c < 2; ++c) {
                 const float v = pout[size_t(c) * kMax + i];
                 y[size_t(i) * 2 + c] = v;
                 poutPk[c] = std::fmax(poutPk[c], std::fabs(v));
-                const float k = kHp[c].tick(kShelf[c].tick(v));
-                ms += k * k;
             }
-        s->loud.push({ms / float(P), std::fmax(poutPk[0], poutPk[1]), uint32_t(P)});
 
         const double dt = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
         const float ld = float(100.0 * dt * rate / P);
@@ -508,8 +513,11 @@ struct Engine {
         cfg = want;
         rate = want.rate;
         if (!dec.prepare(rate, 2)) { err = "invalid sample rate"; return false; }
+        // One core per channel: halves the time of each block (same sound).
+        dec.setWorker(nullptr);
+        if (std::thread::hardware_concurrency() >= 2 && (worker.running() || worker.start(1))) dec.setWorker(&worker);
         for (auto& p : phono) { p.prepare(rate); p.setMixNow(sh->riaa.load(), sh->phonoGain.load()); }
-        for (int c = 0; c < 2; ++c) kWeighting(rate, kShelf[c], kHp[c]);
+        sideTap.prepare(rate);
         pin.assign(size_t(kMax) * 2, 0.f); pout.assign(size_t(kMax) * 2, 0.f); prest.assign(size_t(kMax) * 2, 0.f);
         ip = {&pin[0], &pin[kMax]}; op = {&pout[0], &pout[kMax]}; rp = {&prest[0], &prest[kMax]};
         seenSide = sh->adNewSide.load();
@@ -631,7 +639,7 @@ int main(int argc, char** argv) {
 
     std::mutex stMutex;
     Settings pending;
-    std::atomic<bool> reconfig{false}, dirty{false}, wantCards{true}, changed{false}, wantRecs{true}, wantFile{true};
+    std::atomic<bool> reconfig{false}, dirty{false}, wantCards{true}, changed{false}, wantRecs{true}, wantFile{true}, sideNew{false};
     std::string lastError;
 
     Engine eng;
@@ -706,8 +714,11 @@ int main(int argc, char** argv) {
             changed = true;
         } else if (cmd == "cards") {
             wantCards = true;
+        } else if (cmd == "side_new") {
+            sideNew = true;              // "New side": the dynamics of the side start again
         } else if (cmd == "ad_side") {
             sh.adNewSide.fetch_add(1);
+            sideNew = true;
         } else if (cmd == "rec_start" || cmd == "rec_stop" || cmd == "rec_delete") {
             std::lock_guard<std::mutex> lk(stMutex);
             recCmds.push_back({cmd == "rec_start" ? 1 : cmd == "rec_stop" ? 2 : 3, j.str(cmd == "rec_delete" ? "file" : "name")});
@@ -724,7 +735,11 @@ int main(int argc, char** argv) {
         static const std::string kDl = "/download/";
         if (path.compare(0, kDl.size(), kDl) == 0) {
             std::string full;
-            if (vcd::validRecFile(recDir, path.substr(kDl.size()), &full)) return {full, "audio/flac", path.substr(kDl.size())};
+            if (vcd::validRecFile(recDir, path.substr(kDl.size()), &full)) {
+                const std::string n = path.substr(kDl.size());
+                const bool w = n.size() > 4 && (n.compare(n.size() - 4, 4, ".wav") == 0 || n.compare(n.size() - 4, 4, ".WAV") == 0);
+                return {full, w ? "audio/wav" : "audio/flac", n};
+            }
             return {};
         }
         std::lock_guard<std::mutex> lk(job.m);
@@ -818,11 +833,10 @@ int main(int argc, char** argv) {
     if (!noWindow) windowOpened = vcd::openWindow(url, cfgDir + "/window", browserOnly);
     if (!noWindow && !windowOpened) std::printf("Open %s in a browser.\n", url.c_str());
 
-    LoudnessMeter meter;
-    meter.reset(st.rate);
+    SideMeter side;
+    side.reset(st.rate);
     LevelStats levels;
     levels.reset(st.rate);
-    double lST = -120, lInt = -120, lLRA = 0, lPLR = 0, lSec = 0;
     auto lastLoud = std::chrono::steady_clock::now(), lastBcast = lastLoud, lastSave = lastLoud, lastRecs = lastLoud;
     auto lastClient = lastLoud, lastSound = lastLoud, lastRetry = lastLoud;
     bool everConnected = false;
@@ -860,10 +874,14 @@ int main(int argc, char** argv) {
                     else if (vcd::freeBytes(recDir) < (uint64_t(300) << 20)) e = "no_space";
                     else {
                         const std::string base = vcd::safeRecName(c.arg);
-                        const std::string path = vcd::uniqueRecPath(recDir, base);
+                        int fmtW, bitsW; { std::lock_guard<std::mutex> lk(stMutex); fmtW = st.recFmt; bitsW = st.recBits; }
+                        const bool wav = fmtW == 1;
+                        int bits = bitsW ? bitsW : (wav ? 32 : 24);   // maximum: FLAC 24 bits, WAV 32-bit float
+                        if (!wav && bits == 32) bits = 24;
+                        const std::string path = vcd::uniqueRecPath(recDir, base, wav ? ".wav" : ".flac");
                         bool clean; { std::lock_guard<std::mutex> lk(stMutex); clean = st.recClean; }
                         sh.recClean = clean;
-                        if (rec.start(path, eng.rate, 2, 24, base, e, clean ? "Cleaned recording — vinylclean" : "Raw recording (no processing) — vinylclean")) {
+                        if (rec.start(path, eng.rate, 2, bits, base, e, clean ? "Cleaned recording — vinylclean" : "Raw recording (no processing) — vinylclean", wav)) {
                             recName = path.substr(recDir.size() + 1);
                             std::lock_guard<std::mutex> lk(stMutex); recMsg.clear();
                         }
@@ -902,7 +920,7 @@ int main(int argc, char** argv) {
             lastRetry = now;
             Settings want; { std::lock_guard<std::mutex> lk(stMutex); want = st; }
             std::string e;
-            if (eng.start(want, e)) { engineOpen = true; good = want; meter.reset(eng.rate); levels.reset(eng.rate); std::lock_guard<std::mutex> lk(stMutex); lastError.clear(); }
+            if (eng.start(want, e)) { engineOpen = true; good = want; side.reset(eng.rate); levels.reset(eng.rate); std::lock_guard<std::mutex> lk(stMutex); lastError.clear(); }
         }
         // ---- Audio reconfiguration (card, rate) ----
         if (reconfig.exchange(false)) {
@@ -921,15 +939,16 @@ int main(int argc, char** argv) {
                 std::lock_guard<std::mutex> lk(stMutex);
                 lastError = e + " — previous configuration restored";
             }
-            meter.reset(eng.rate);
+            side.reset(eng.rate);
             levels.reset(eng.rate);
             dirty = true; changed = true;
         }
 
         // ---- Loudness ----
-        { LoudItem it; while (sh.loud.pop(it)) meter.add(it); }
+        { SideItem it; while (sh.side.pop(it)) side.add(it); }
+        if (sideNew.exchange(false)) side.startSide();
         { LevelItem it; while (sh.lv.pop(it)) levels.add(it); }
-        if (now - lastLoud >= std::chrono::seconds(1)) { lastLoud = now; meter.compute(lST, lInt, lLRA, lPLR, lSec); levels.compute(); }
+        if (now - lastLoud >= std::chrono::seconds(1)) { lastLoud = now; side.compute(); levels.compute(); }
 
         // ---- Messages to the page ----
         if (changed.exchange(false)) web.broadcast(stateJson());
@@ -992,14 +1011,12 @@ int main(int argc, char** argv) {
             std::snprintf(b, sizeof b,
                           "{\"type\":\"status\",\"running\":%s,\"inL\":%.1f,\"inR\":%.1f,\"outL\":%.1f,\"outR\":%.1f,"
                           "\"sat\":%s,\"clicks\":%llu,\"crackles\":%llu,\"load\":%.1f,\"loadMax\":%.1f,\"xruns\":%u,"
-                          "\"lufsS\":%.1f,\"lufsI\":%.1f,\"lra\":%.1f,\"plr\":%.1f,\"loudSec\":%.0f,"
                           "\"rate\":%u,\"outState\":\"RUNNING\",\"format\":\"32-bit float\",\"latency\":%.0f,\"rt\":true,\"error\":\"%s\",\"clients\":%d,"
                           "\"satPhono\":%s,\"recOn\":%s,\"recSec\":%.1f,\"recLost\":%llu,\"recAvail\":true,"
                           "\"adR\":%.1f,\"adErr\":%.2f,\"adV\":%.1f,\"adSide\":%.0f,\"adReady\":%s,\"desktop\":true}",
                           engineOpen ? "true" : "false", db(pi[0]), db(pi[1]), db(po[0]), db(po[1]),
                           now - lastSatTime < std::chrono::seconds(3) ? "true" : "false", sh.repaired.load(), sh.crackles.load(),
                           (double)sh.load.load(), (double)sh.loadMax.load(), sh.xruns.load(),
-                          lST, lInt, lLRA, lPLR, lSec,
                           engineOpen ? eng.rate : 0u, engineOpen ? eng.latencyMs() : 0.0, jsonEscape(e).c_str(), web.clients(),
                           now - lastSatPTime < std::chrono::seconds(3) ? "true" : "false",
                           rec.recording() ? "true" : "false", rec.seconds(), (unsigned long long)rec.droppedBlocks(),
@@ -1009,6 +1026,10 @@ int main(int argc, char** argv) {
             auto num = [](double v, const char* f) { char t[32]; if (std::isfinite(v)) std::snprintf(t, sizeof t, f, v); else std::snprintf(t, sizeof t, "null"); return std::string(t); };
             full.insert(full.size() - 1, ",\"bal\":" + num(levels.balanceDb, "%.1f") + ",\"corr\":" + num(levels.correlation, "%.2f") +
                                          ",\"noise\":" + num(levels.noiseDb, "%.0f") + ",\"recClean\":" + (sh.recClean ? "true" : "false"));
+            full.insert(full.size() - 1, ",\"sideSec\":" + num(side.seconds, "%.0f") + ",\"sideDr\":" + num(side.dr, "%.1f") +
+                                         ",\"sidePlr\":" + num(side.plr, "%.1f") + ",\"sideLufs\":" + num(side.lufs, "%.1f") +
+                                         ",\"sidePeak\":" + num(side.peakDb, "%.1f") + ",\"sideArm\":" + (side.armUp ? "true" : "false") +
+                                         ",\"sideN\":" + std::to_string(side.sideCount));
             full.insert(full.size() - 1, ",\"recName\":\"" + jsonEscape(rec.recording() ? recName : std::string()) + "\",\"recMsg\":\"" + jsonEscape(msg) + "\"");
             web.broadcast(full);
         }

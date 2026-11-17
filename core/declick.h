@@ -15,6 +15,7 @@
 #include "vc_util.h"
 #include "ar.h"
 #include "lsar.h"
+#include "worker.h"
 #include <vector>
 #include <cstdint>
 
@@ -29,6 +30,7 @@ struct DeclickParams {
     float kOverride    = 0.f;    // > 0: forced threshold k (used by the decrackler)
     bool  multiband    = true;   // multiband repair (only the bands where the click dominates)
     bool  stereo       = true;   // use the other channel (detection and long clicks)
+    float warp         = 0.f;    // warped prediction for the DETECTION only (Esquef et al. 2002), λ; 0 = classic
 };
 
 struct DeclickStats {
@@ -150,6 +152,12 @@ private:
 
     // Buffers (allocated in prepare).
     std::vector<float> raw_, rest_, scratch_, win_, xw_, ef_, eb_, md_, absbuf_;
+    std::vector<float> restPre_;   // rest_ before the repairs of this hop (read by the other channel)
+    // Warped prediction (detection only): λ, warped autocorrelation, model, filter state.
+    float warp_ = 0.f;
+    std::vector<double> rW_, aW_, yW_, tW_;
+    std::vector<float> xW_;
+    void warpedError(const float* x, int from, int to, float* out, bool backward);
     std::vector<float> outQRaw_, outQRest_, env_;
     std::vector<double> r_, aD_, tmp_, c_, psum_;
     std::vector<double> rH_, aH_, tmpH_, cH_;  // high-order model (long clicks)
@@ -214,8 +222,15 @@ public:
 
     DeclickStats stats() const;
     DeclickChannel& channel(int c) { return ch_[c]; }
+    // Helper thread for the second channel (nullptr: everything in the calling thread).
+    // Same result, bit for bit.
+    void setWorker(ChannelWorker* w) { worker_ = w; }
 
 private:
+    ChannelWorker* worker_ = nullptr;
+    struct Job { DeclickChannel* ch; const DeclickChannel* other; const DeclickParams* prm; int phase; float* oRaw; float* oRest; };
+    Job job_{};
+    static void runJob(void* p);
     static constexpr int kChunk = 256;
     std::vector<DeclickChannel> ch_;
     std::vector<float> raw_, rest_;   // kChunk × channels

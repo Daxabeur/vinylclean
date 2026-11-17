@@ -143,12 +143,37 @@
     font: inherit; font-size: 12px; font-weight: 600; padding: 4px 9px; cursor: pointer; }
   .lang button.sel { background: var(--acc); color: #1a1408; border-color: var(--acc); }
   header .lang + .info { margin-left: 10px; }
+  .grid2 label { display: block; font-weight: 600; margin-top: 10px; }
+  .stats.side { grid-template-columns: repeat(4, 1fr); margin-top: 4px; }
+  .stats b.good { color: var(--ok); } .stats b.bad { color: var(--bad); }
+  /* Organizing the cards (▲ ▼): every card folds to its title. */
+  .orgbtn { margin-left: auto; background: #252931; color: var(--dim); border: 1px solid var(--line); border-radius: 8px;
+    font: inherit; font-size: 12px; font-weight: 600; padding: 4px 9px; cursor: pointer; white-space: nowrap; }
+  .orgbtn + .lang { margin-left: 8px; }
+  header { flex-wrap: wrap; row-gap: 4px; }
+  header .info { white-space: nowrap; }
+  @media (max-width: 520px) { header .lang + .info { margin-left: auto; } }
+  body.org .orgbtn { background: var(--acc); color: #1a1408; border-color: var(--acc); }
+  .orgrow { display: none; align-items: center; gap: 8px; }
+  .orgrow b { flex: 1; font-size: 15px; }
+  .orgrow button { min-width: 52px; min-height: 46px; border-radius: 10px; border: 1px solid var(--line); background: #252931;
+    color: var(--txt); font: inherit; font-size: 20px; cursor: pointer; }
+  .orgrow button:disabled { opacity: .3; }
+  body.org section.card > :not(.orgrow) { display: none !important; }
+  body.org .orgrow { display: flex; }
+  body.org section.card { padding: 8px 10px; }
+  body.org section.card.moved { border-color: var(--acc); }
+  #orgBar { display: none; position: sticky; bottom: 0; z-index: 5; background: var(--bg); border-top: 1px solid var(--line); padding: 8px 2px 4px; }
+  body.org #orgBar { display: block; grid-column: 1 / -1; }
+  #orgBar p { margin: 0 0 6px; color: var(--dim); font-size: 13px; }
+  #orgBar .btn { flex: 1; margin-top: 0; }
 </style>
 </head>
 <body>
 <header>
   <span class="dot" id="dot"></span>
   <h1>vinylclean</h1>
+  <button class="orgbtn" id="orgBtn" data-i18n="org.btn"></button>
   <div class="lang" id="lang"><button data-v="en">EN</button><button data-v="fr">FR</button></div>
   <div class="info" id="info"></div>
 </header>
@@ -158,7 +183,7 @@
 <div class="alert err" id="err"></div>
 
 <div class="col">
-  <section class="card">
+  <section class="card" data-blk="listen">
     <h2 data-i18n="listen.title"></h2>
     <div class="seg" id="mode">
       <button data-v="0"><span data-i18n="listen.orig"></span><small data-i18n="listen.orig.s"></small></button>
@@ -167,7 +192,7 @@
     </div>
   </section>
 
-  <section class="card">
+  <section class="card" data-blk="sens">
     <h2 data-i18n="sens.title"></h2>
     <div class="row" style="margin-top:0">
       <label><span class="lbl" data-i18n="sens.both"></span> <span id="tSens"></span></label>
@@ -185,7 +210,7 @@
     <p class="note" data-i18n="sens.note"></p>
   </section>
 
-  <section class="card" id="lvCard">
+  <section class="card" data-blk="levels" id="lvCard">
     <details id="lvBox" open>
     <summary><span data-i18n="levels.title"></span><span class="lvsum" id="lvSum"></span></summary>
     <div class="meters" style="margin-top:10px">
@@ -197,17 +222,26 @@
     </div>
     <div class="clipwarn" id="clipLatch" hidden></div>
     <p class="advice" id="lvAdvice"></p>
-    <div class="stats" style="margin-top:12px;grid-template-columns:repeat(4,1fr)">
+    <div class="stats" style="margin-top:12px;grid-template-columns:repeat(3,1fr)">
       <div><b id="sBal">–</b><span data-i18n="levels.bal"></span></div>
       <div><b id="sCorr">–</b><span data-i18n="levels.corr"></span></div>
       <div><b id="sNoise">–</b><span data-i18n="levels.noise"></span></div>
-      <div><b id="sPlr">–</b><span data-i18n="levels.plr"></span></div>
     </div>
     <p class="note" data-i18n="levels.note"></p>
+    <h3 class="sub" data-i18n="side.title"></h3>
+    <div class="stats side">
+      <div><b id="sDr">–</b><span data-i18n="side.dr"></span></div>
+      <div><b id="sSidePlr">–</b><span data-i18n="side.plr"></span></div>
+      <div><b id="sLufs">–</b><span data-i18n="side.lufs"></span></div>
+      <div><b id="sSideT">–</b><span id="sSideTl" data-i18n="side.time"></span></div>
+    </div>
+    <p class="advice dim" id="sideAdvice"></p>
+    <button class="btn small" id="sideNew" style="width:100%;margin-top:8px" data-i18n="side.new"></button>
+    <p class="note" data-i18n="side.note"></p>
     </details>
   </section>
 
-  <section class="card">
+  <section class="card" data-blk="stats">
     <div class="stats">
       <div><b id="sClicks">0</b><span data-i18n="st.clicks"></span></div>
       <div><b id="sCrackles">0</b><span data-i18n="st.crackles"></span></div>
@@ -216,7 +250,7 @@
     </div>
   </section>
 
-  <section class="card" id="adCard">
+  <section class="card" data-blk="ad" id="adCard">
     <h2 data-i18n="ad.title"></h2>
     <div class="seg" id="ad">
       <button data-v="0" data-i18n="off"></button>
@@ -298,7 +332,7 @@
 </div>
 
 <div class="col">
-  <section class="card">
+  <section class="card" data-blk="adv">
     <details id="advBox">
       <summary data-i18n="adv.title"></summary>
       <div class="row">
@@ -363,7 +397,7 @@
     </details>
   </section>
 
-  <section class="card" id="recCard">
+  <section class="card" data-blk="rec" id="recCard">
     <h2 data-i18n="rec.title"></h2>
     <label for="recName" data-i18n="rec.name"></label>
     <input type="text" id="recName" maxlength="150" autocomplete="off">
@@ -374,6 +408,18 @@
         <button data-v="1"><span data-i18n="rec.clean"></span><small data-i18n="rec.clean.s"></small></button>
       </div>
     </div>
+    <div class="row">
+      <label data-i18n="rec.fmt"></label>
+      <div class="seg" id="recFmt" style="margin-top:6px">
+        <button data-v="0"><span>FLAC</span><small data-i18n="rec.flac.s"></small></button>
+        <button data-v="1"><span>WAV</span><small data-i18n="rec.wav.s"></small></button>
+      </div>
+      <div class="grid2">
+        <div><label for="recBits" data-i18n="rec.bits"></label><select id="recBits"></select></div>
+        <div><label for="recRate" data-i18n="rec.rate"></label><select id="recRate"></select></div>
+      </div>
+      <p class="note" id="recFmtNote"></p>
+    </div>
     <div class="recrow" style="margin-top:12px">
       <button class="btn rec" id="recStart"><span class="rd"></span><span data-i18n="rec.start"></span></button>
       <button class="btn stop" id="recStop" disabled><span class="sq"></span><span data-i18n="rec.stop"></span></button>
@@ -383,13 +429,13 @@
     <p class="note" id="recFree"></p>
   </section>
 
-  <section class="card" id="recsCard">
+  <section class="card" data-blk="recs" id="recsCard">
     <h2 data-i18n="recs.title"></h2>
     <ul class="reclist" id="recList"></ul>
     <p class="note" id="recEmpty" data-i18n="recs.empty"></p>
   </section>
 
-  <section class="card">
+  <section class="card" data-blk="card">
     <details id="cardBox">
       <summary data-i18n="card.title"></summary>
       <div class="row"><label data-i18n="card.in"></label><select id="inDev"></select></div>
@@ -399,6 +445,11 @@
       <button class="btn" id="apply" data-i18n="card.apply"></button>
     </details>
   </section>
+</div>
+
+<div id="orgBar">
+  <p data-i18n="org.help"></p>
+  <div class="recrow"><button class="btn small" id="orgDefault" data-i18n="org.default"></button><button class="btn small" id="orgDone" data-i18n="org.done"></button></div>
 </div>
 
 <script>
@@ -425,8 +476,8 @@ const I18N = {
     "prot.none": "None", "prot.normal": "Normal", "prot.max": "Maximum",
     "sens.note": "0 = off. 1 to 5: more and more sensitive. Separate declick and decrackle settings: “Advanced settings”. To remove more large clicks: protection “None”.",
     "levels.title": "Levels", "levels.inL": "Input L", "levels.inR": "Input R", "levels.outL": "Output L", "levels.outR": "Output R",
-    "levels.plr": "peak / average", "levels.bal": "balance L / R", "levels.corr": "stereo / mono", "levels.noise": "background noise",
-    "levels.note": "Balance and stereo are measured on the turntable signal; background noise is the quietest moment between two tracks (state of the record). Peak / average: over the last minute.",
+"levels.bal": "balance L / R", "levels.corr": "stereo / mono", "levels.noise": "background noise",
+    "levels.note": "Balance and stereo are measured on the turntable signal; background noise is the quietest moment between two tracks (state of the record). ",
     "levels.clip.in": "⚠ The input clipped (0 dBFS): lower the input gain of the sound card. Tap to clear.",
     "levels.clip.out": "⚠ The output clipped (0 dBFS): lower the phono gain. Tap to clear.",
     "levels.adv.none": "No signal", "levels.adv.ok": "Good level",
@@ -438,10 +489,10 @@ const I18N = {
     "levels.phase.t": "The two channels are opposed: a cable or the cartridge may be wired backwards on one side.",
     "rec.title": "Recording", "rec.name": "File name", "rec.source": "Sound to record",
     "rec.raw": "Raw", "rec.raw.s": "no cleaning", "rec.clean": "Cleaned", "rec.clean.s": "with declick",
-    "rec.note.clean": "Sound after cleaning (declick, decrackle, anti-distortion if on), as 24-bit FLAC, whatever you are listening to.",
+    "rec.note.clean": "Sound after cleaning (declick, decrackle, anti-distortion if on), whatever you are listening to.",
     "rec.now.raw": "raw", "rec.now.clean": "cleaned", "rec.placeholder": "e.g. Artist - Album - Side A",
     "rec.start": "Record", "rec.stop": "Stop",
-    "rec.note": "Turntable sound without declick (with the RIAA correction if the built-in preamp is selected), as 24-bit FLAC. You can listen and adjust the cleaning while recording.",
+    "rec.note": "Turntable sound without declick (with the RIAA correction if the built-in preamp is selected). You can listen and adjust the cleaning while recording.",
     "rec.lost": "Warning: the disk could not keep up, a few fractions of a second are missing.",
     "rec.free": "Free space: {0} (≈ {1} of recording)",
     "rec.m.start_fail": "Cannot record: {0}", "rec.m.card_not_ready": "the sound card is not ready", "rec.m.no_space": "not enough space left (less than 300 MB)",
@@ -480,9 +531,26 @@ const I18N = {
     "st.clicks": "clicks", "st.crackles": "crackles", "st.load": "load", "st.xruns": "dropouts",
     "card.title": "Sound card and quality", "card.in": "Input", "card.out": "Output", "card.rate": "Sample rate",
     "card.apply": "Apply (≈ 1 s of silence)", "card.current": "{0} (current)",
-    "card.two": "Two different cards: their clocks drift slightly. Small dropouts are possible every few minutes (no drift correction yet).",
+    "card.two": "Two different cards: their clocks drift slightly and this version does not correct it: small dropouts are possible every few minutes.",
     "card.best": "Best format of the card: {0}. Always at maximum quality, without conversion.",
-    "card.heavy": "  ⚠ too heavy for this Pi (≈ {0} %)", "card.est": "  (≈ {0} % of one core)"
+    "card.heavy": "  ⚠ too heavy for this Pi (≈ {0} %)", "card.est": "  (≈ {0} % of one core)",
+    "card.drift": "Two different cards: the drift of their clocks is corrected automatically (the output follows its own clock, {0} ppm). Outside the repaired clicks the sound is then no longer bit-exact (resampled by a few millionths, error below −110 dB).",
+    "side.title": "Dynamics of the side (original sound)", "side.dr": "DR (dynamics)", "side.plr": "peak / loudness",
+    "side.lufs": "loudness", "side.time": "since the stylus drop", "side.armUp": "arm raised", "side.new": "⟲ New side (start the measurement again)",
+    "side.wait": "Measuring… (a few seconds of music)",
+    "side.a.great": "Very dynamic music (DR 14 and more): little or no compression.",
+    "side.a.ok": "Moderate dynamics (DR 8 to 13): usual for most records.",
+    "side.a.loud": "Strongly compressed music (DR 7 and less): \u201cloudness war\u201d mastering.",
+    "side.note": "Measured on the original sound (turntable after the phono preamp, before any cleaning), from the stylus drop to now. A new side starts by itself when the music comes back after 8 s with the arm raised. DR: published “DR” method (3 s blocks, second highest peak against the loudest 20 %). Loudness: ITU-R BS.1770. Clicks can raise the peaks a little.",
+    "rec.fmt": "File format", "rec.flac.s": "lossless, compressed", "rec.wav.s": "uncompressed", "rec.bits": "Bits", "rec.rate": "Sample rate",
+    "rec.max": "Maximum ({0})", "rec.b16": "16 bits (CD, with dither)", "rec.b24": "24 bits", "rec.b32": "32 bits float",
+    "rec.b32.flac": "32 bits float (WAV only)",
+    "rec.fmt.now": "File: {0} · {1} · {2}.", "rec.fmt.max": " Maximum quality: nothing of the card's signal is lost.",
+    "rec.fmt.max32": " Maximum quality: every value is kept exactly, even above 0 dBFS.",
+    "rec.fmt.16": " 16 bits: smaller file, quality of a CD.", "rec.rate.note": " Changing the sample rate changes that of the card (≈ 1 s of silence).",
+    "rec.rate.busy": "(not during a recording)",
+    "org.btn": "⇅ Arrange", "org.help": "Move the cards with ▲ ▼ to put what you use most at the top. The order is kept for every screen.",
+    "org.default": "Default order", "org.done": "Done", "org.up": "Up", "org.down": "Down", "org.stats": "Counters", "file.title2": "Clean a file"
   },
   fr: {
     connecting: "connexion…", disconnected: "déconnecté…", stopped: "audio arrêté", changingCard: "changement de carte…",
@@ -501,8 +569,8 @@ const I18N = {
     "prot.none": "Aucune", "prot.normal": "Normale", "prot.max": "Maximale",
     "sens.note": "0 = désactivé. 1 à 5 : de plus en plus sensible. Réglage séparé du déclick et du dé-crackle : « Paramètres avancés ». Pour enlever plus de gros clics : protection « Aucune ».",
     "levels.title": "Niveaux", "levels.inL": "Entrée G", "levels.inR": "Entrée D", "levels.outL": "Sortie G", "levels.outR": "Sortie D",
-    "levels.plr": "crête / moyenne", "levels.bal": "équilibre G / D", "levels.corr": "stéréo / mono", "levels.noise": "bruit de fond",
-    "levels.note": "Équilibre et stéréo sont mesurés sur le signal de la platine ; le bruit de fond est le moment le plus calme entre deux morceaux (état du disque). Crête / moyenne : sur la dernière minute.",
+"levels.bal": "équilibre G / D", "levels.corr": "stéréo / mono", "levels.noise": "bruit de fond",
+    "levels.note": "Équilibre et stéréo sont mesurés sur le signal de la platine ; le bruit de fond est le moment le plus calme entre deux morceaux (état du disque).",
     "levels.clip.in": "⚠ L'entrée a saturé (0 dBFS) : baisse le gain d'entrée de la carte son. Touche pour effacer.",
     "levels.clip.out": "⚠ La sortie a saturé (0 dBFS) : baisse le gain phono. Touche pour effacer.",
     "levels.adv.none": "Pas de signal", "levels.adv.ok": "Bon niveau",
@@ -514,10 +582,10 @@ const I18N = {
     "levels.phase.t": "Les deux canaux s'opposent : un câble ou la cellule est peut-être branché à l'envers d'un côté.",
     "rec.title": "Enregistrement", "rec.name": "Nom du fichier", "rec.source": "Son à enregistrer",
     "rec.raw": "Brut", "rec.raw.s": "sans nettoyage", "rec.clean": "Nettoyé", "rec.clean.s": "avec déclick",
-    "rec.note.clean": "Son après nettoyage (déclick, dé-crackle, anti-distorsion si activée), en FLAC 24 bits, quelle que soit l'écoute choisie.",
+    "rec.note.clean": "Son après nettoyage (déclick, dé-crackle, anti-distorsion si activée), quelle que soit l'écoute choisie.",
     "rec.now.raw": "brut", "rec.now.clean": "nettoyé", "rec.placeholder": "ex. Artiste - Album - Face A",
     "rec.start": "Enregistrer", "rec.stop": "Arrêter",
-    "rec.note": "Son de la platine sans déclick (avec la correction RIAA si le préampli intégré est choisi), en FLAC 24 bits. Tu peux écouter et régler le nettoyage pendant l'enregistrement.",
+    "rec.note": "Son de la platine sans déclick (avec la correction RIAA si le préampli intégré est choisi). Tu peux écouter et régler le nettoyage pendant l'enregistrement.",
     "rec.lost": "Attention : le disque n'a pas suivi, quelques fractions de seconde manquent.",
     "rec.free": "Place libre : {0} (≈ {1} d'enregistrement)",
     "rec.m.start_fail": "Impossible d'enregistrer : {0}", "rec.m.card_not_ready": "la carte son n'est pas prête", "rec.m.no_space": "plus assez de place (moins de 300 Mo)",
@@ -556,9 +624,26 @@ const I18N = {
     "st.clicks": "clics", "st.crackles": "craquements", "st.load": "charge", "st.xruns": "coupures",
     "card.title": "Carte son et qualité", "card.in": "Entrée", "card.out": "Sortie", "card.rate": "Fréquence d'échantillonnage",
     "card.apply": "Appliquer (≈ 1 s de silence)", "card.current": "{0} (actuelle)",
-    "card.two": "Deux cartes différentes : leurs horloges dérivent un peu. Petites coupures possibles toutes les quelques minutes (correction de dérive pas encore disponible).",
+    "card.two": "Deux cartes différentes : leurs horloges dérivent un peu et cette version ne le corrige pas : petites coupures possibles toutes les quelques minutes.",
     "card.best": "Meilleur format de la carte : {0}. Toujours en qualité maximale, sans conversion.",
-    "card.heavy": "  ⚠ trop lourd pour ce Pi (≈ {0} %)", "card.est": "  (≈ {0} % d'un cœur)"
+    "card.heavy": "  ⚠ trop lourd pour ce Pi (≈ {0} %)", "card.est": "  (≈ {0} % d'un cœur)",
+    "card.drift": "Deux cartes différentes : la dérive de leurs horloges est corrigée automatiquement (la sortie suit sa propre horloge, {0} ppm). En dehors des clics réparés, le son n'est alors plus identique au bit près (rééchantillonné de quelques millionièmes, erreur sous −110 dB).",
+    "side.title": "Dynamique de la face (son original)", "side.dr": "DR (dynamique)", "side.plr": "crête / sonie",
+    "side.lufs": "sonie", "side.time": "depuis la pose du diamant", "side.armUp": "bras levé", "side.new": "⟲ Nouvelle face (recommencer la mesure)",
+    "side.wait": "Mesure en cours… (quelques secondes de musique)",
+    "side.a.great": "Musique très dynamique (DR 14 et plus) : peu ou pas de compression.",
+    "side.a.ok": "Dynamique moyenne (DR 8 à 13) : habituel pour la plupart des disques.",
+    "side.a.loud": "Musique très compressée (DR 7 et moins) : mastering « loudness war ».",
+    "side.note": "Mesuré sur le son original (platine après le préampli phono, avant tout nettoyage), de la pose du diamant à maintenant. Une nouvelle face démarre toute seule quand la musique revient après 8 s de bras levé. DR : méthode « DR » publiée (blocs de 3 s, deuxième plus haute crête face aux 20 % les plus forts). Sonie : ITU-R BS.1770. Les clics peuvent un peu relever les crêtes.",
+    "rec.fmt": "Format du fichier", "rec.flac.s": "sans perte, compressé", "rec.wav.s": "non compressé", "rec.bits": "Bits", "rec.rate": "Fréquence",
+    "rec.max": "Maximum ({0})", "rec.b16": "16 bits (CD, avec dither)", "rec.b24": "24 bits", "rec.b32": "32 bits flottant",
+    "rec.b32.flac": "32 bits flottant (WAV seulement)",
+    "rec.fmt.now": "Fichier : {0} · {1} · {2}.", "rec.fmt.max": " Qualité maximale : rien du signal de la carte n'est perdu.",
+    "rec.fmt.max32": " Qualité maximale : chaque valeur est gardée exactement, même au-dessus de 0 dBFS.",
+    "rec.fmt.16": " 16 bits : fichier plus petit, qualité d'un CD.", "rec.rate.note": " Changer la fréquence change celle de la carte (≈ 1 s de silence).",
+    "rec.rate.busy": "(pas pendant un enregistrement)",
+    "org.btn": "⇅ Organiser", "org.help": "Déplace les cartes avec ▲ ▼ pour mettre en haut ce que tu utilises le plus. L'ordre est gardé pour tous les écrans.",
+    "org.default": "Ordre par défaut", "org.done": "Terminé", "org.up": "Monter", "org.down": "Descendre", "org.stats": "Compteurs", "file.title2": "Nettoyer un fichier"
   }
 };
 function pickLang() {
@@ -580,6 +665,7 @@ function applyLang() {
   for (const b of $("lang").querySelectorAll("button")) b.classList.toggle("sel", b.dataset.v === LANG);
   if (!ws || ws.readyState !== 1) $("info").textContent = t("connecting");
   render(); status(); renderRecs(); fillCards();
+  if (document.body.classList.contains("org")) orgButtons();
 }
 $("lang").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;
@@ -592,7 +678,7 @@ let ws = null, S = {}, St = {}, cards = [], dragging = null, sendTimer = null, p
 
 function connect() {
   ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
-  ws.onopen = () => { $("dot").classList.add("on"); };
+  ws.onopen = () => { $("dot").classList.add("on"); send({cmd: "cards"}); };
   ws.onclose = () => { $("dot").classList.remove("on"); $("info").textContent = t("disconnected"); setTimeout(connect, 1500); };
   ws.onmessage = ev => {
     let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
@@ -633,6 +719,8 @@ function render() {
   }
   renderAd();
   fillCards();
+  renderRecFmt();
+  applyLayout();
 }
 // ---- Anti-distortion: arm geometry (same formulas as the program) ----
 const NULLS = {0: [66.00, 120.90], 1: [70.29, 116.60], 2: [60.325, 117.42]};
@@ -745,9 +833,25 @@ function levelsStatus() {
   $("sCorr").className = c != null && c < -0.1 ? "warn" : "";
   $("sCorr").title = c == null ? "" : (c < -0.1 ? t("levels.phase.t") + " " : "") + "r = " + fr(c, 2);
   $("sNoise").textContent = St.noise == null ? "–" : St.noise + " dB";
-  const ok = St.running && St.loudSec >= 10 && St.lufsS > -70;
-  $("sPlr").textContent = ok ? fr(St.plr, 1) + " dB" : "–";
+  sideStatus();
 }
+// ---- Dynamics of the side (original sound) ----
+function sideStatus() {
+  const dr = St.sideDr, plr = St.sidePlr, l = St.sideLufs;
+  const has = St.running && dr != null;
+  $("sDr").textContent = has ? "DR " + Math.round(dr) : "–";
+  $("sDr").className = !has ? "" : dr >= 13.5 ? "good" : dr < 7.5 ? "bad" : "";
+  $("sDr").title = has ? fr(dr, 1) + " dB" : "";
+  $("sSidePlr").textContent = St.running && plr != null ? fr(plr, 1) + " dB" : "–";
+  $("sLufs").textContent = St.running && l != null ? fr(l, 1) + " LUFS" : "–";
+  $("sSideT").textContent = St.running && St.sideSec > 0 ? dur(St.sideSec) : "–";
+  $("sSideTl").textContent = St.sideArm && St.sideSec > 0 ? t("side.armUp") : t("side.time");
+  let a = "", c = "dim";
+  if (St.running && St.sideSec > 0 && !has) a = t("side.wait");
+  else if (has) { a = dr >= 13.5 ? t("side.a.great") : dr < 7.5 ? t("side.a.loud") : t("side.a.ok"); c = dr >= 13.5 ? "ok" : dr < 7.5 ? "bad" : "dim"; }
+  $("sideAdvice").textContent = a; $("sideAdvice").className = "advice " + c;
+}
+$("sideNew").addEventListener("click", () => send({cmd: "side_new"}));
 $("clipLatch").addEventListener("click", () => { clipIn = clipOut = false; for (const k in HOLD) HOLD[k] = {db: -120, t: 0}; levelsStatus(); });
 $("lvBox").addEventListener("toggle", () => { try { localStorage.setItem("vc.lvOpen", $("lvBox").open ? "1" : "0"); } catch (e) {} });
 try { if (localStorage.getItem("vc.lvOpen") === "0") $("lvBox").open = false; } catch (e) {}
@@ -764,7 +868,48 @@ function recMessage(raw) {
   if (!I18N.en["rec.m." + code]) return raw;
   return t("rec.m." + code, detail, d) + (lost === "1" ? t("rec.m.lost") : "");
 }
+// Recording format: FLAC / WAV, bits, sample rate (= the card's).
+function cardRates() {
+  const ci = cards.find(c => c.dev === S.in), co = cards.find(c => c.dev === S.out);
+  let rates = ci && co ? ci.in.filter(r => co.out.includes(r)) : [];
+  if (!rates.length && S.rate) rates = [S.rate];
+  return rates;
+}
+function renderRecFmt() {
+  if (S.recFmt === undefined) return;
+  const wav = S.recFmt == 1, on = !!St.recOn;
+  seg("recFmt", wav ? 1 : 0);
+  for (const b of $("recFmt").querySelectorAll("button")) b.disabled = on;
+  const maxName = wav ? t("rec.b32") : t("rec.b24");
+  const opts = [[0, t("rec.max", maxName)], [32, wav ? t("rec.b32") : t("rec.b32.flac")], [24, t("rec.b24")], [16, t("rec.b16")]];
+  const bs = $("recBits");
+  if (document.activeElement !== bs) {
+    bs.innerHTML = "";
+    for (const [v, txt] of opts) { const o = new Option(txt, v); if (v === 32 && !wav) o.disabled = true; bs.add(o); }
+    bs.value = String(!wav && S.recBits == 32 ? 0 : (S.recBits || 0));
+  }
+  bs.disabled = on;
+  const rs = $("recRate");
+  if (document.activeElement !== rs) {
+    rs.innerHTML = "";
+    for (const r of cardRates()) { const o = new Option(fr(r / 1000, r % 1000 ? 1 : 0) + " kHz", r); if (r === S.rate) o.selected = true; rs.add(o); }
+  }
+  rs.disabled = on || !St.running;
+  const bits = S.recBits || (wav ? 32 : 24), bitsTxt = bits === 32 ? t("rec.b32") : bits + " bits";
+  const rate = St.rate || S.rate || 48000;
+  let n = t("rec.fmt.now", wav ? "WAV" : "FLAC", bitsTxt, fr(rate / 1000, rate % 1000 ? 1 : 0) + " kHz");
+  n += !S.recBits ? (wav ? t("rec.fmt.max32") : t("rec.fmt.max")) : bits === 16 ? t("rec.fmt.16") : "";
+  n += on ? " " + t("rec.rate.busy") : t("rec.rate.note");
+  $("recFmtNote").textContent = n;
+}
+$("recFmt").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; S.recFmt = +b.dataset.v; renderRecFmt(); send({cmd: "set", recFmt: S.recFmt}); renderRecs(); });
+$("recBits").addEventListener("change", () => { S.recBits = +$("recBits").value; renderRecFmt(); send({cmd: "set", recBits: S.recBits}); renderRecs(); });
+$("recRate").addEventListener("change", () => {
+  const r = +$("recRate").value; if (!r || r === S.rate || St.recOn) return;
+  send({cmd: "set", in: S.in, out: S.out, rate: r}); $("info").textContent = t("changingCard");
+});
 function recStatus() {
+  renderRecFmt();
   const on = !!St.recOn;
   $("recCard").hidden = St.recAvail === false;
   $("recStart").disabled = on || !St.running;
@@ -799,7 +944,8 @@ function renderRecs() {
   }
   $("recEmpty").hidden = (recs.items || []).length > 0;
   // Free space ≈ remaining time (24-bit stereo FLAC ≈ 60 % of raw).
-  const rate = St.rate || 48000, perSec = rate * 2 * 3 * 0.6;
+  const wavF = S.recFmt == 1, bitsF = S.recBits || (wavF ? 32 : 24);
+  const rate = St.rate || 48000, perSec = rate * 2 * (bitsF / 8) * (wavF ? 1 : 0.6);
   const left = recs.free / perSec, leftTxt = left >= 3600 ? Math.floor(left / 3600) + " h" : Math.floor(left / 60) + " min";
   $("recFree").textContent = recs.free ? t("rec.free", size(recs.free), leftTxt) : "";
   $("recFree").className = "note" + (recs.free && recs.free < 1e9 ? " warn" : "");
@@ -841,6 +987,7 @@ function fillCards() {
   };
   fill($("inDev"), "in", S.in); fill($("outDev"), "out", S.out);
   updateRates();
+  renderRecFmt();
 }
 function updateRates() {
   const ci = cards.find(c => c.dev === $("inDev").value), co = cards.find(c => c.dev === $("outDev").value);
@@ -861,8 +1008,9 @@ function updateRates() {
     sel.add(o);
   }
   const two = $("inDev").value !== $("outDev").value;
-  $("cardNote").textContent = two ? t("card.two") : (ci ? t("card.best", ci.format) : "");
-  $("cardNote").className = "note" + (two ? " warn" : "");
+  const drift = two && St.driftPpm != null && $("inDev").value === S.in && $("outDev").value === S.out;
+  $("cardNote").textContent = drift ? t("card.drift", (St.driftPpm >= 0 ? "+" : "") + fr(St.driftPpm, 0)) : two ? t("card.two") : (ci ? t("card.best", ci.format) : "");
+  $("cardNote").className = "note" + (two && !drift ? " warn" : "");
 }
 
 for (const id of ["mode", "protect", "sens", "sensDeclick", "sensDecrackle", "multiband", "stereo", "riaa", "rumble", "ad", "autoPos", "recClean"]) {
@@ -889,6 +1037,71 @@ $("apply").addEventListener("click", () => {
   send({cmd: "set", in: $("inDev").value, out: $("outDev").value, rate: +$("rate").value});
   $("info").textContent = t("changingCard");
 });
+// ---- Order of the cards (button "Arrange", ▲ ▼). Saved by the program: the same
+// order on every screen. Two columns on a wide screen, one on a phone (left then right).
+let DEF_LAYOUT = null;
+const colEls = () => Array.from(document.querySelectorAll("body > .col"));
+const blk = id => document.querySelector('section[data-blk="' + id + '"]');
+function curLayout() { return colEls().map(c => Array.from(c.querySelectorAll(":scope > section[data-blk]")).map(e => e.dataset.blk)); }
+function parseLayout(str) {
+  if (!DEF_LAYOUT) DEF_LAYOUT = curLayout();
+  const all = DEF_LAYOUT.flat();
+  const cols = (str || "").split("|").map(c => c.split(",").filter(id => all.includes(id)));
+  if (!str || cols.length !== 2) return DEF_LAYOUT.map(c => c.slice());
+  const seen = new Set(cols.flat());
+  // A card unknown to the saved order (new card, desktop card) keeps its default column.
+  DEF_LAYOUT.forEach((c, i) => c.forEach(id => { if (!seen.has(id)) cols[i].push(id); }));
+  return cols;
+}
+function applyLayout() {
+  if (S.layout === undefined) return;
+  const lay = parseLayout(S.layout), cols = colEls();
+  if (JSON.stringify(lay) === JSON.stringify(curLayout())) return;
+  lay.forEach((ids, i) => ids.forEach(id => { const e = blk(id); if (e) cols[i].appendChild(e); }));
+  orgButtons();
+}
+function orgTitle(sec) {
+  const id = sec.dataset.blk;
+  const key = {listen: "listen.title", sens: "sens.title", levels: "levels.title", stats: "org.stats", ad: "ad.title", adv: "adv.title",
+    rec: "rec.title", file: "file.title2", recs: "recs.title", card: "card.title"}[id];
+  return key ? t(key) : id;
+}
+function orgButtons() {
+  const single = !matchMedia("(min-width: 700px) and (orientation: landscape)").matches;
+  const lay = curLayout(), seq = lay.flat(), sL = lay[0].length;
+  for (const sec of document.querySelectorAll("section[data-blk]")) {
+    let row = sec.querySelector(":scope > .orgrow");
+    if (!row) {
+      row = document.createElement("div"); row.className = "orgrow";
+      row.innerHTML = '<b></b><button data-d="-1">▲</button><button data-d="1">▼</button>';
+      row.addEventListener("click", e => { const b = e.target.closest("button"); if (b) orgMove(sec.dataset.blk, +b.dataset.d); });
+      sec.prepend(row);
+    }
+    row.querySelector("b").textContent = orgTitle(sec);
+    const i = seq.indexOf(sec.dataset.blk);
+    row.querySelector('[data-d="-1"]').disabled = i <= 0 && !(!single && i === sL);
+    row.querySelector('[data-d="1"]').disabled = i >= seq.length - 1 && !(!single && i === sL - 1);
+    row.querySelector('[data-d="-1"]').title = t("org.up"); row.querySelector('[data-d="1"]').title = t("org.down");
+  }
+}
+function orgMove(id, d) {
+  const single = !matchMedia("(min-width: 700px) and (orientation: landscape)").matches;
+  const lay = curLayout(), seq = lay.flat();
+  let sL = lay[0].length;
+  const i = seq.indexOf(id);
+  if (!single && d < 0 && i === sL) sL++;                 // top of the right column → end of the left one
+  else if (!single && d > 0 && i === sL - 1) sL--;        // end of the left column → top of the right one
+  else { const j = i + d; if (j < 0 || j >= seq.length) return; [seq[i], seq[j]] = [seq[j], seq[i]]; }
+  S.layout = seq.slice(0, sL).join(",") + "|" + seq.slice(sL).join(",");
+  applyLayout();
+  const sec = blk(id); sec.classList.add("moved"); setTimeout(() => sec.classList.remove("moved"), 600);
+  sec.scrollIntoView({block: "nearest"});
+  send({cmd: "set", layout: S.layout});
+}
+$("orgBtn").addEventListener("click", () => { document.body.classList.toggle("org"); orgButtons(); });
+$("orgDone").addEventListener("click", () => { document.body.classList.remove("org"); });
+$("orgDefault").addEventListener("click", () => { S.layout = ""; applyLayout(); send({cmd: "set", layout: ""}); });
+window.addEventListener("resize", () => { if (document.body.classList.contains("org")) orgButtons(); });
 applyLang();
 connect();
 </script>

@@ -109,6 +109,7 @@ void DeclickChannel::prepare(double fs, bool crackle) {
     raw_.assign(B_, 0.f);
     rest_.assign(B_, 0.f);
     scratch_.assign(B_, 0.f);
+    restPre_.assign(B_, 0.f);
     ef_.assign(B_, 0.f);
     md_.assign(B_, 0.f);
     eb_.assign(B_, 0.f);
@@ -127,6 +128,8 @@ void DeclickChannel::prepare(double fs, bool crackle) {
     aF_.assign(p_, 0.f);
     aRevF_.assign(p_, 0.f);
     cF_.assign(p_ + 1, 0.f);
+    rW_.assign(p_ + 1, 0.0); aW_.assign(p_, 0.0); yW_.assign(p_ + 1, 0.0); tW_.assign(p_ + 1, 0.0);
+    xW_.assign(N_, 0.f);
     psum_.assign(B_ + 1, 0.0);
     bandAbs_.assign(B_, 0.f);
     bandBg_.assign((dE_ - dS_) / blk_ + 2, 0.f);
@@ -226,6 +229,26 @@ void DeclickChannel::estimateAR(const float* x) {
     for (int i = 0; i < N_; ++i) xw_[i] = x[eS_ + i] * win_[i];
     autocorrelation(xw_.data(), N_, p_, r_.data());
     levinson(r_.data(), p_, aD_.data(), tmp_.data());
+    if (warp_ != 0.f) {
+        // Warped autocorrelation (Härmä et al.): r[k] = Σ x·D^k(x), with
+        // D(z) = (z⁻¹ − λ) / (1 − λ z⁻¹). The ordinary model is kept for the repairs.
+        const double lam = warp_;
+        for (int i = 0; i < N_; ++i) xW_[i] = xw_[i];
+        double e0 = 0; for (int i = 0; i < N_; ++i) e0 += double(xw_[i]) * xw_[i];
+        rW_[0] = e0;
+        for (int k = 1; k <= p_; ++k) {
+            double prevIn = 0, prevOut = 0, acc = 0;
+            for (int i = 0; i < N_; ++i) {
+                const double in = xW_[i];
+                const double out = -lam * in + prevIn + lam * prevOut;
+                prevIn = in; prevOut = out;
+                xW_[i] = float(out);
+                acc += double(xw_[i]) * out;
+            }
+            rW_[k] = acc;
+        }
+        levinson(rW_.data(), p_, aW_.data(), tmp_.data());
+    }
     c_[0] = 1.0;
     cF_[0] = 1.f;
     for (int k = 0; k < p_; ++k) {
@@ -254,7 +277,40 @@ int DeclickChannel::estimateHighOrder(const float* x, int center, int order) {
     return order;
 }
 
+// Warped prediction error filter A(D(z)) = 1 − Σ a_k D(z)^k, run forward or
+// backward (time-reversed: the matched filter and the backward error).
+void DeclickChannel::warpedError(const float* x, int from, int to, float* out, bool backward) {
+    const double lam = warp_;
+    const int p = p_;
+    for (int k = 0; k <= p; ++k) yW_[k] = 0.0;   // y_k at the previous step
+    const int step = backward ? -1 : 1;
+    int n = backward ? to - 1 : from;
+    const int end = backward ? from - 1 : to;
+    for (; n != end; n += step) {
+        double prevChain = yW_[0];        // y_{k-1} at the previous step
+        double cur = x[n];                // y_0 now
+        yW_[0] = cur;
+        double pred = 0;
+        for (int k = 1; k <= p; ++k) {
+            const double yk = -lam * cur + prevChain + lam * yW_[k];
+            prevChain = yW_[k];
+            yW_[k] = yk;
+            cur = yk;
+            pred += aW_[k - 1] * yk;
+        }
+        out[n] = float(x[n] - pred);
+    }
+}
+
 void DeclickChannel::computeErrors(const float* x) {
+    if (warp_ != 0.f) {
+        // Warm-up of the filters (infinite memory) before the zone used.
+        const int w0 = std::max(0, eS_ - 512);
+        warpedError(x, w0, B_, ef_.data(), false);
+        warpedError(ef_.data(), eS_, B_, md_.data(), true);
+        warpedError(x, eS_, B_, eb_.data(), true);
+        return;
+    }
     const float* ar = aRevF_.data();
     for (int n = eS_; n < eE_ + p_; ++n) ef_[n] = x[n] - dot(ar, x + n - p_, p_);
     const float* cf = cF_.data();
@@ -752,7 +808,7 @@ bool DeclickChannel::jointInterp(int gs, int L, const double* cc, int order, con
     const int K = xK_, n = 2 * K + 1, ge = gs + L;
     if (L > static_cast<int>(xPrior_.size())) return false;
     const float* X = rest_.data();
-    const float* R = o->rest_.data();
+    const float* R = o->restPre_.data();   // the other channel before its own repairs of this hop
     // Autocorrelation (Toeplitz) method on the neighboring music, with gaps and
     // clicks of either channel set to zero: ≈ 4 times less computation than
     // the full covariance, for an equivalent estimate.
@@ -853,6 +909,7 @@ void DeclickChannel::hopAnalyze(const DeclickParams& prm) {
     protCur_ = prm.pitchProtect ? std::clamp(prm.protect, 0, 2) : 0;
     lmaxCur_ = std::clamp(roundi(prm.maxClickMs * 1e-3 * fs_), 1, lmaxMax_);
     mbOn_ = prm.multiband;
+    warp_ = prm.warp;
 
     if (k > 0.f) {
         energyReady_ = false;
@@ -934,6 +991,9 @@ void DeclickChannel::hopDetect(const DeclickParams& prm, const DeclickChannel* o
             }
         }
     }
+    // Snapshot read by the other channel during the repairs (identical result
+    // whether the two channels are repaired one after the other or in parallel).
+    std::memcpy(restPre_.data(), rest_.data(), sizeof(float) * B_);
 }
 
 void DeclickChannel::hopRepair(const DeclickParams& prm, const DeclickChannel* other) {
@@ -1105,12 +1165,23 @@ void Declicker::process(const float* const* in, float* const* out, int n) {
                 due = ch_[c].push(in[c] + off + done, &raw_[c * kChunk + done], &rest_[c * kChunk + done], step) || due;
             if (due) {
                 auto other = [&](int c) -> const DeclickChannel* { return nch == 2 ? &ch_[1 - c] : nullptr; };
-                for (int c = 0; c < nch; ++c) ch_[c].hopAnalyze(prm_);
-                for (int c = 0; c < nch; ++c) ch_[c].hopDetect(prm_, other(c));
-                for (int c = 0; c < nch; ++c) ch_[c].hopRepair(prm_, other(c));
-                for (int c = 0; c < nch; ++c) {
-                    ch_[c].hopOutput();
-                    ch_[c].finishHop(&raw_[c * kChunk + done + step - 1], &rest_[c * kChunk + done + step - 1]);
+                if (worker_ && nch == 2) {
+                    // Channel 1 on the helper thread, channel 0 here, phase by phase.
+                    for (int ph = 0; ph < 4; ++ph) {
+                        job_ = {&ch_[1], &ch_[0], &prm_, ph, &raw_[kChunk + done + step - 1], &rest_[kChunk + done + step - 1]};
+                        worker_->post(&Declicker::runJob, &job_);
+                        Job j0{&ch_[0], &ch_[1], &prm_, ph, &raw_[done + step - 1], &rest_[done + step - 1]};
+                        runJob(&j0);
+                        worker_->wait();
+                    }
+                } else {
+                    for (int c = 0; c < nch; ++c) ch_[c].hopAnalyze(prm_);
+                    for (int c = 0; c < nch; ++c) ch_[c].hopDetect(prm_, other(c));
+                    for (int c = 0; c < nch; ++c) ch_[c].hopRepair(prm_, other(c));
+                    for (int c = 0; c < nch; ++c) {
+                        ch_[c].hopOutput();
+                        ch_[c].finishHop(&raw_[c * kChunk + done + step - 1], &rest_[c * kChunk + done + step - 1]);
+                    }
                 }
             }
             done += step;
@@ -1136,6 +1207,17 @@ void Declicker::process(const float* const* in, float* const* out, int n) {
             }
         }
         fadePos_ = std::max(0, fadePos_ - m);
+    }
+}
+
+void Declicker::runJob(void* p) {
+    const Job& j = *static_cast<const Job*>(p);
+    DenormalGuard dg;   // the helper thread too
+    switch (j.phase) {
+        case 0: j.ch->hopAnalyze(*j.prm); break;
+        case 1: j.ch->hopDetect(*j.prm, j.other); break;
+        case 2: j.ch->hopRepair(*j.prm, j.other); break;
+        default: j.ch->hopOutput(); j.ch->finishHop(j.oRaw, j.oRest); break;
     }
 }
 

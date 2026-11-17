@@ -22,10 +22,12 @@ echo "=== 3/4  Automatic tests ==="
 ./build/vc-tests-rec
 ./build/vc-tests-riaa
 ./build/vc-tests-antidist
+./build/vc-tests-side
+./build/vc-tests-drift
 
 echo "=== 4/4  Install into /usr/local/bin ==="
 sudo cmake --install build --prefix /usr/local
-echo "Installed: vc-live, vc-file, vc-bench, vc-tests, vc-tests-crackle, vc-tests-loudness, vc-tests-rec, vc-tests-riaa, vc-tests-antidist"
+echo "Installed: vc-live, vc-file, vc-bench, vc-tests, vc-tests-crackle, vc-tests-loudness, vc-tests-rec, vc-tests-riaa, vc-tests-antidist, vc-tests-side, vc-tests-drift"
 echo "Control page: /usr/local/share/vinylclean/index.html (editable, reloaded every time it is opened)"
 
 if [ "$1" = "--service" ]; then

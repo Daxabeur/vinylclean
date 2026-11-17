@@ -23,6 +23,7 @@ void Decrackler::setParams(const DecrackleParams& p) {
     q.protect = p.protect;
     q.multiband = p.multiband;
     q.stereo = p.stereo;
+    q.warp = p.warp;
     eng_.setParams(q);
 }
 

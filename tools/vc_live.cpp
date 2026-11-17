@@ -49,6 +49,8 @@ static const unsigned kRates[] = {44100, 48000, 88200, 96000, 176400, 192000};
 
 #include "loudness.h"
 #include "levels.h"
+#include "sidemeter.h"
+#include "drift.h"
 #include "riaa.h"
 #ifdef VC_RECORD
 #include "recorder.h"
@@ -83,7 +85,7 @@ struct Shared {
     std::atomic<unsigned> satCount{0};      // input samples at 0 dBFS (clipping)
     std::atomic<bool> rtOk{false};
     std::atomic<bool> failed{false};
-    LoudRing loud;
+    SideRing side;                 // dynamics of the side, ORIGINAL sound (after the phono preamp)
     LevelRing lv;                  // balance / stereo / noise sums (after the phono preamp)
     std::atomic<bool> recClean{false};   // the recording in progress takes the cleaned sound
 #ifdef VC_RECORD
@@ -104,6 +106,9 @@ struct Settings {
     float phonoGainDb = 12.f;
     bool rumble = true;
     bool recClean = false;         // recording: false = raw turntable sound, true = cleaned sound
+    int recFmt = 0;                // recording file: 0 FLAC, 1 WAV
+    int recBits = 0;               // 0 = maximum (FLAC 24 bits, WAV 32-bit float), or 16 / 24 / 32
+    std::string layout;            // order of the cards of the page ("id,id|id,id"), empty = default
     // Anti-distortion
     bool adOn = false, adAutoPos = true;
     float armLen = 222.f, null1 = 60.325f, null2 = 117.42f, stylusUm = 7.6f;
@@ -120,13 +125,13 @@ static int commonSens(const Settings& s) {
     return (a >= 0 && a == b) ? a : -1;
 }
 static std::string settingsToJson(const Settings& s) {
-    char b[2048];
+    char b[4096];
     std::snprintf(b, sizeof b,
                   "{\"scale\":3,\"ad\":%d,\"armLen\":%g,\"align\":%d,\"null1\":%g,\"null2\":%g,\"stylus\":%d,\"stylusUm\":%g,\"disc\":%d,\"autoPos\":%d,\"posMm\":%g,\"sideMin\":%g,\"adInt\":%g,"
-                  "\"sens\":%d,\"sensDeclick\":%d,\"sensDecrackle\":%d,\"declick\":%g,\"decrackle\":%g,\"protect\":%d,\"maxclick\":%g,\"multiband\":%d,\"stereo\":%d,\"riaa\":%d,\"phonoGain\":%g,\"rumble\":%d,\"recClean\":%d,\"mode\":%d,"
+                  "\"sens\":%d,\"sensDeclick\":%d,\"sensDecrackle\":%d,\"declick\":%g,\"decrackle\":%g,\"protect\":%d,\"maxclick\":%g,\"multiband\":%d,\"stereo\":%d,\"riaa\":%d,\"phonoGain\":%g,\"rumble\":%d,\"recClean\":%d,\"recFmt\":%d,\"recBits\":%d,\"layout\":\"%s\",\"mode\":%d,"
                   "\"in\":\"%s\",\"out\":\"%s\",\"rate\":%u,\"periods\":%d}",
                   s.adOn ? 1 : 0, s.armLen, s.align, s.null1, s.null2, s.stylus, s.stylusUm, s.disc, s.adAutoPos ? 1 : 0, s.posMm, s.sideMin, s.adInt,
-                  commonSens(s), declickSensForIntensity(s.declick), decrackleSensForIntensity(s.decrackle), s.declick, s.decrackle, s.protect, s.maxClick, s.multiband ? 1 : 0, s.stereo ? 1 : 0, s.riaa ? 1 : 0, s.phonoGainDb, s.rumble ? 1 : 0, s.recClean ? 1 : 0, s.mode,
+                  commonSens(s), declickSensForIntensity(s.declick), decrackleSensForIntensity(s.decrackle), s.declick, s.decrackle, s.protect, s.maxClick, s.multiband ? 1 : 0, s.stereo ? 1 : 0, s.riaa ? 1 : 0, s.phonoGainDb, s.rumble ? 1 : 0, s.recClean ? 1 : 0, s.recFmt, s.recBits, jsonEscape(s.layout).c_str(), s.mode,
                   jsonEscape(s.inDev).c_str(), jsonEscape(s.outDev).c_str(), s.rate, s.periods);
     return b;
 }
@@ -144,6 +149,9 @@ static void settingsFromJson(const JsonFlat& j, Settings& s) {
     if (j.has("phonoGain")) s.phonoGainDb = float(std::fmin(40, std::fmax(0, j.num("phonoGain"))));
     if (j.has("rumble")) s.rumble = j.num("rumble") != 0;
     if (j.has("recClean")) s.recClean = j.num("recClean") != 0;
+    if (j.has("recFmt")) s.recFmt = j.num("recFmt") != 0 ? 1 : 0;
+    if (j.has("recBits")) { const int b = int(j.num("recBits")); s.recBits = (b == 16 || b == 24 || b == 32) ? b : 0; }
+    if (j.has("layout")) s.layout = j.str("layout").substr(0, 400);
     auto clampf = [](double v, double lo, double hi) { return float(std::fmin(hi, std::fmax(lo, v))); };
     if (j.has("ad")) s.adOn = j.num("ad") != 0;
     if (j.has("armLen")) s.armLen = clampf(j.num("armLen"), 150, 400);
@@ -258,16 +266,22 @@ struct Engine {
     Settings cfg;
     int channels = 2;
     int periodReq = 0;
+    int threads = 2;               // 2: second channel on another core (same result)
+    ChannelWorker worker;
     Shared* sh = nullptr;
     snd_pcm_t* cap = nullptr;
     snd_pcm_t* play = nullptr;
     Format fmt{};
     snd_pcm_uframes_t period = 0, buffer = 0;
     bool linked = false;
+    bool drift = false;            // two different cards: clock drift correction on the output
+    DriftResampler drs;
+    DriftControl dctl;
+    std::atomic<float> driftPpm{0.f};
     unsigned seenSide = 0;   // last press seen on "start of side"
     Chain dec;
     Caps capsIn, capsOut;
-    Biquad kShelf[2], kHp[2];
+    SideTap sideTap;
     PhonoStage phono[2];
     std::thread th;
     std::atomic<bool> stopReq{false};
@@ -280,6 +294,10 @@ struct Engine {
 
     bool open(std::string& err) {
         if (!dec.prepare(cfg.rate, channels)) { err = "invalid sample rate or channel count"; return false; }
+        // One core per channel (the Pi has 4): halves the time of each period.
+        dec.setWorker(nullptr);
+        if (threads >= 2 && channels == 2 && std::thread::hardware_concurrency() >= 2 && (worker.running() || worker.start(75)))
+            dec.setWorker(&worker);
         for (auto& ph : phono) { ph.prepare(cfg.rate); ph.setMixNow(sh->riaa.load(), sh->phonoGain.load()); }
         seenSide = sh->adNewSide.load();
         period = periodReq > 0 ? periodReq : dec.hopSize();
@@ -296,10 +314,13 @@ struct Engine {
         capsIn = probeHandle(cap, channels);
         capsOut = probeHandle(play, channels);
         bool ok = false;
+        // Two different cards: their clocks drift; the output gets 2 more periods of
+        // room so that the correction can let its filling move a little.
+        drift = cfg.inDev != cfg.outDev;
         for (const auto& f : kFormats) {
             snd_pcm_uframes_t pc = period, bc = 0, pp = period, bp = 0;
             if (setupPcm(cap, f, cfg.rate, channels, pc, bc, cfg.periods, false) &&
-                setupPcm(play, f, cfg.rate, channels, pp, bp, cfg.periods, true) && pc == pp) {
+                setupPcm(play, f, cfg.rate, channels, pp, bp, cfg.periods + (drift ? 2 : 0), true) && pc == pp) {
                 fmt = f; period = pc; buffer = bp; ok = true;
                 break;
             }
@@ -308,7 +329,7 @@ struct Engine {
             err = "the card refuses " + std::to_string(cfg.rate) + " Hz / " + std::to_string(channels) + " channels";
             close(); return false;
         }
-        for (int c = 0; c < 2; ++c) kWeighting(cfg.rate, kShelf[c], kHp[c]);
+        sideTap.prepare(cfg.rate);
         linked = false;  // no input/output link: explicit start of both (see startStreams)
         return true;
     }
@@ -319,9 +340,10 @@ struct Engine {
         snd_pcm_prepare(play);
         snd_pcm_prepare(cap);
         std::vector<uint8_t> silence(size_t(period) * channels * fmt.bytes, 0);
-        const int pre = std::max(1, int(buffer / period) - 1);
+        const int pre = std::max(1, int(buffer / period) - (drift ? 2 : 1));
         for (int i = 0; i < pre; ++i)
             if (snd_pcm_writei(play, silence.data(), period) < 0) return false;
+        if (drift) { drs.prepare(channels, int(period)); dctl.reset(double(pre) * period, cfg.rate); }
         // Start the output then the input. Even if both streams are linked
         // (same card), we check that the OUTPUT really runs: with some USB
         // cards, the link starts the input without the output.
@@ -339,7 +361,10 @@ struct Engine {
         const int nch = channels;
         const size_t P = period;
         // Buffers allocated BEFORE the audio loop.
-        std::vector<uint8_t> inRaw(P * nch * fmt.bytes), outRaw(P * nch * fmt.bytes);
+        std::vector<uint8_t> inRaw(P * nch * fmt.bytes), outRaw(2 * P * nch * fmt.bytes);
+        std::vector<float> planDrift(2 * P * nch);   // output of the drift correction (two cards)
+        std::vector<float*> dp(nch);
+        for (int c = 0; c < nch; ++c) dp[c] = &planDrift[c * 2 * P];
         std::vector<float> planIn(P * nch), planOut(P * nch), planRest(P * nch);
         std::vector<const float*> ip(nch);
         std::vector<float*> op(nch);
@@ -388,6 +413,7 @@ struct Engine {
             }
             // Balance / stereo / noise of the turntable signal (after the phono preamp).
             sh->lv.push(levelSums(ip[0], ip[nch >= 2 ? 1 : 0], P));
+            sh->side.push(sideTap.sums(ip[0], ip[nch >= 2 ? 1 : 0], P));   // dynamics of the side (original)
             const bool recClean = sh->recClean.load(std::memory_order_relaxed);
 #ifdef VC_RECORD
             if (sh->rec && !recClean) sh->rec->push(ip.data(), nch, P);   // raw sound: lock-free copy, never blocking (after the RIAA)
@@ -434,24 +460,30 @@ struct Engine {
                 sh->adReady.store(ds.levelReady, r);
             }
 
-            float ms = 0.f;
-            for (size_t i = 0; i < P; ++i)
+            // Two cards: the output follows its own clock (adaptive resampling, a few ppm).
+            size_t nOut = P;
+            const float* src = planOut.data();
+            size_t srcStride = P;
+            if (drift) {
+                nOut = size_t(drs.process(op.data(), int(P), dp.data(), int(2 * P), dctl.step()));
+                src = planDrift.data(); srcStride = 2 * P;
+            }
+            for (size_t i = 0; i < nOut; ++i)
                 for (int c = 0; c < nch; ++c) {
-                    const float v = planOut[c * P + i];
-                    if (c < 2) {
-                        pout[c] = std::fmax(pout[c], std::fabs(v));
-                        const float k = kHp[c].tick(kShelf[c].tick(v));   // K-weighting
-                        ms += k * k;
-                    }
+                    const float v = src[c * srcStride + i];
+                    if (c < 2) pout[c] = std::fmax(pout[c], std::fabs(v));
                     fromFloat(v, &outRaw[(i * nch + c) * fmt.bytes], fmt.f);
                 }
-            sh->loud.push({ms / float(P), std::fmax(pout[0], pout[1]), uint32_t(P)});
 
             size_t put = 0;
-            while (put < P && gRun) {
-                snd_pcm_sframes_t w = snd_pcm_writei(play, outRaw.data() + put * nch * fmt.bytes, P - put);
+            while (put < nOut && gRun) {
+                snd_pcm_sframes_t w = snd_pcm_writei(play, outRaw.data() + put * nch * fmt.bytes, nOut - put);
                 if (w < 0) { xrun = true; break; }
                 put += size_t(w);
+            }
+            if (drift && !xrun) {
+                snd_pcm_sframes_t d = 0;
+                if (snd_pcm_delay(play, &d) == 0) { dctl.update(double(d), periodSec); driftPpm.store(float(dctl.ppm()), std::memory_order_relaxed); }
             }
             if (xrun) { sh->xruns++; if (!startStreams()) { sh->failed = true; return; } }
 
@@ -545,6 +577,7 @@ static void usage() {
         "  --no-save           do not save the settings\n"
         "  --rec-dir FOLDER    recordings folder (default ~/recordings)\n"
         "  --period N / --periods N   ALSA period size and count (default auto / 3)\n"
+        "  --threads 1         everything on one core (default 2: one core per channel, same sound)\n"
         "  --quiet             no status display\n\n"
         "Keys while listening: + / -  sensitivity (both)   c / v  decrackle sensitivity\n"
         "  1 Bypass (original)  2 Removed (what is removed)  3 Repair (cleaned)\n"
@@ -574,7 +607,7 @@ int main(int argc, char** argv) {
     Settings st;
     std::string settingsPath = defaultSettingsPath();
     std::string webFile = "/usr/local/share/vinylclean/index.html";
-    int httpPort = 8080, period = 0;
+    int httpPort = 8080, period = 0, threads = 2;
     std::string recDir = defaultRecDir();
     bool quiet = false, save = true;
 
@@ -635,6 +668,7 @@ int main(int argc, char** argv) {
         else if (a == "--no-save") save = false;
         else if (a == "--rec-dir") recDir = next();
         else if (a == "--period") period = std::atoi(next().c_str());
+        else if (a == "--threads") threads = std::atoi(next().c_str());
         else if (a == "--periods") st.periods = std::max(2, std::atoi(next().c_str()));
         else if (a == "--quiet") quiet = true;
         else if (a == "-h" || a == "--help") { usage(); return 0; }
@@ -664,11 +698,12 @@ int main(int argc, char** argv) {
     // State shared with the web thread (lock: never in the audio thread).
     std::mutex stMutex;
     Settings pending;
-    std::atomic<bool> reconfig{false}, dirty{false}, wantCards{false}, changed{false};
+    std::atomic<bool> reconfig{false}, dirty{false}, wantCards{false}, changed{false}, sideNew{false};
     std::string lastError;
     Engine eng;
     eng.sh = &sh;
     eng.periodReq = period;
+    eng.threads = threads;
     std::atomic<bool> engineOpen{false};
 
     // ---- Recording ----
@@ -715,8 +750,11 @@ int main(int argc, char** argv) {
             changed = true;   // the main thread will send the state back to ALL screens
         } else if (cmd == "cards") {
             wantCards = true;
+        } else if (cmd == "side_new") {
+            sideNew = true;              // "New side": the dynamics of the side start again
         } else if (cmd == "ad_side") {
             sh.adNewSide.fetch_add(1);   // "stylus dropped at the start of the side"
+            sideNew = true;
         } else if (cmd == "rec_start" || cmd == "rec_stop" || cmd == "rec_delete") {
             std::lock_guard<std::mutex> lk(stMutex);
             recCmds.push_back({cmd == "rec_start" ? 1 : cmd == "rec_stop" ? 2 : 3, j.str(cmd == "rec_delete" ? "file" : "name")});
@@ -760,11 +798,10 @@ int main(int argc, char** argv) {
         return true;
     };
 
-    LoudnessMeter meter;
-    meter.reset(st.rate);
+    SideMeter side;
+    side.reset(st.rate);
     LevelStats levels;
     levels.reset(st.rate);
-    double lST = -120, lInt = -120, lLRA = 0, lPLR = 0, lSec = 0;
     auto lastLoud = std::chrono::steady_clock::now();
     Settings good = st;  // last audio configuration that worked
     if (!openEngine(st)) {
@@ -851,12 +888,15 @@ int main(int argc, char** argv) {
                     else if (freeBytes(recDir) < (uint64_t(300) << 20)) err = "no_space";
                     else {
                         const std::string base = safeRecName(c.arg);
-                        const std::string path = uniqueRecPath(recDir, base);
-                        bool clean; { std::lock_guard<std::mutex> lk(stMutex); clean = st.recClean; }
-                        const int bits = (eng.fmt.bytes == 2 && !clean) ? 16 : 24;
+                        bool clean; int fmtW, bitsW; { std::lock_guard<std::mutex> lk(stMutex); clean = st.recClean; fmtW = st.recFmt; bitsW = st.recBits; }
+                        const bool wav = fmtW == 1;
+                        // Maximum: FLAC 24 bits (16 if the card only gives 16 bits, raw sound), WAV 32-bit float.
+                        int bits = bitsW ? bitsW : (wav ? 32 : ((eng.fmt.bytes == 2 && !clean) ? 16 : 24));
+                        if (!wav && bits == 32) bits = 24;   // FLAC: 24 bits at most here
+                        const std::string path = uniqueRecPath(recDir, base, wav ? ".wav" : ".flac");
                         sh.recClean = clean;   // before start(): the audio thread then pushes the right signal
                         if (rec.start(path, eng.cfg.rate, std::min(eng.channels, 2), bits, base, err,
-                                      clean ? "Cleaned recording — vinylclean" : "Raw recording (no processing) — vinylclean")) {
+                                      clean ? "Cleaned recording — vinylclean" : "Raw recording (no processing) — vinylclean", wav)) {
                             recName = path.substr(recDir.size() + 1);
                             std::lock_guard<std::mutex> lk(stMutex); recMsg.clear();
                             if (!quiet) std::printf("\nRecording: %s (%u Hz, %d bits)\n", path.c_str(), eng.cfg.rate, bits);
@@ -892,7 +932,7 @@ int main(int argc, char** argv) {
             Settings want;
             { std::lock_guard<std::mutex> lk(stMutex); want = pending; }
             if (engineOpen) { eng.stopThread(); eng.close(); engineOpen = false; }
-            meter.reset(want.rate);
+            side.reset(want.rate);
             levels.reset(want.rate);
             if (openEngine(want)) {
                 good = want;
@@ -916,9 +956,10 @@ int main(int argc, char** argv) {
             if (openEngine(want)) good = want;
         }
         // Loudness and dynamic range (computed once per second).
-        { LoudItem it; while (sh.loud.pop(it)) meter.add(it); }
+        { SideItem it; while (sh.side.pop(it)) side.add(it); }
+        if (sideNew.exchange(false)) side.startSide();
         { LevelItem it; while (sh.lv.pop(it)) levels.add(it); }
-        if (now - lastLoud >= std::chrono::seconds(1)) { lastLoud = now; meter.compute(lST, lInt, lLRA, lPLR, lSec); levels.compute(); }
+        if (now - lastLoud >= std::chrono::seconds(1)) { lastLoud = now; side.compute(); levels.compute(); }
         if (changed.exchange(false) && httpPort > 0) web.broadcast(stateJson());
         if (wantCards.exchange(false) && httpPort > 0) web.broadcast(cardsJson(eng, engineOpen));
 #ifdef VC_RECORD
@@ -985,12 +1026,10 @@ int main(int argc, char** argv) {
             std::snprintf(b, sizeof b,
                           "{\"type\":\"status\",\"running\":%s,\"inL\":%.1f,\"inR\":%.1f,\"outL\":%.1f,\"outR\":%.1f,"
                           "\"sat\":%s,\"clicks\":%llu,\"crackles\":%llu,\"load\":%.1f,\"loadMax\":%.1f,\"xruns\":%u,"
-                          "\"lufsS\":%.1f,\"lufsI\":%.1f,\"lra\":%.1f,\"plr\":%.1f,\"loudSec\":%.0f,"
                           "\"rate\":%u,\"outState\":\"%s\",\"format\":\"%s\",\"latency\":%.0f,\"rt\":%s,\"error\":\"%s\",\"clients\":%d}",
                           engineOpen ? "true" : "false", db(pi[0]), db(pi[1]), db(po[0]), db(po[1]),
                           satRecent ? "true" : "false", sh.repaired.load(), sh.crackles.load(),
                           (double)sh.load.load(), (double)sh.loadMax.load(), sh.xruns.load(),
-                          lST, lInt, lLRA, lPLR, lSec,
                           engineOpen ? eng.cfg.rate : 0u, (engineOpen && eng.play) ? snd_pcm_state_name(snd_pcm_state(eng.play)) : "",
                           engineOpen ? eng.fmt.name : "",
                           engineOpen ? 1000.0 * (eng.dec.latency() + eng.buffer) / eng.cfg.rate : 0.0,
@@ -1006,6 +1045,12 @@ int main(int argc, char** argv) {
                 auto num = [](double v, const char* f) { char t[32]; if (std::isfinite(v)) std::snprintf(t, sizeof t, f, v); else std::snprintf(t, sizeof t, "null"); return std::string(t); };
                 full.insert(full.size() - 1, ",\"bal\":" + num(levels.balanceDb, "%.1f") + ",\"corr\":" + num(levels.correlation, "%.2f") +
                                              ",\"noise\":" + num(levels.noiseDb, "%.0f") + ",\"recClean\":" + (sh.recClean ? "true" : "false"));
+                // Dynamics of the side (original sound): DR, PLR, integrated loudness, duration.
+                full.insert(full.size() - 1, ",\"sideSec\":" + num(side.seconds, "%.0f") + ",\"sideDr\":" + num(side.dr, "%.1f") +
+                                             ",\"sidePlr\":" + num(side.plr, "%.1f") + ",\"sideLufs\":" + num(side.lufs, "%.1f") +
+                                             ",\"sidePeak\":" + num(side.peakDb, "%.1f") + ",\"sideArm\":" + (side.armUp ? "true" : "false") +
+                                             ",\"sideN\":" + std::to_string(side.sideCount));
+                full.insert(full.size() - 1, std::string(",\"driftPpm\":") + ((engineOpen && eng.drift) ? num(eng.driftPpm.load(), "%.1f") : std::string("null")));
             }
             web.broadcast(full);
         }
