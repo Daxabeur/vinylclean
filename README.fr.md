@@ -1,3 +1,5 @@
+> **Avertissement :** ce projet est fait à 100 % par Claude (l'IA d'Anthropic). Je n'ai apporté que les idées à réaliser.
+
 # vinylclean — nettoyage des vinyles en temps réel sur un Raspberry Pi
 
 *[English version: README.md](README.md)*
